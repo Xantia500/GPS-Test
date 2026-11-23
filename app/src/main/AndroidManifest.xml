@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- GPS : la localisation précise est OBLIGATOIRE pour recevoir le statut GNSS -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Nécessaire pour sendExtraCommand("delete_aiding_data") = remise à zéro AGPS -->
+    <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
+
+    <!-- SERVICE DE PREMIER PLAN -->
+    <!-- API 28+ : permission d'utiliser un foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- API 34+ : type de foreground service obligatoire, ici "location" -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- API 33+ : refusée, la notification FGS peut être absente du tiroir ;
+         le suivi reste actif et le service demeure visible dans les Apps actives. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Réseau réservé au catalogue distant, aux contours régionaux .poly et aux fichiers .map.
+         Aucun préchargement ni téléchargement de région hors ligne n'est
+         effectué depuis le serveur public tile.openstreetmap.org. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- L'appareil a-t-il un GPS ? Non obligatoire : l'app peut tourner sans -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <!-- FileProvider : rend les traces PARTAGEABLES sans aucune permission
+         de stockage. Sans lui, les GPX restent dans /Android/data/... et
+         l'utilisateur ne peut ni les voir ni les utiliser. -->
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GpsTest">
+
+        <service
+            android:name=".TrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ExpertActivity"
+            android:exported="false"
+            android:label="@string/btn_expert" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- Carte vectorielle locale et relecture des traces.
+             configChanges="orientation|screenSize" : garder le renderer
+             Mapsforge et ses fichiers ouverts pendant une rotation, plutôt
+             que de détruire/réouvrir le moteur sans nécessité. -->
+        <activity
+            android:name=".MapActivity"
+            android:exported="false"
+            android:label="@string/map_title"
+            android:parentActivityName=".MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name=".OfflineMapsActivity"
+            android:exported="false"
+            android:label="@string/offline_maps_title"
+            android:parentActivityName=".MapActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <receiver
+            android:name=".DownloadCompleteReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

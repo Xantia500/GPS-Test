@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.example.gpstest'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.example.gpstest"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.17.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    // Finalisation persistante des cartes après DownloadManager (API min 24).
+    implementation 'androidx.work:work-runtime:2.12.0'
+    // Aucun moteur de tuiles raster / réseau n'est embarqué. Le rendu
+    // cartographique repose exclusivement sur Mapsforge et les fichiers .map
+    // régionaux installés localement ; l'interface de sélection utilise un
+    // canevas géographique et les contours .poly mis en cache.
+    // Rendu vectoriel de cartes Mapsforge locales (.map). 0.25.0 est la
+    // dernière version publiée sur Maven Central ; les versions amont plus
+    // récentes ne sont pas publiées sur ce dépôt (voir LOT_7B).
+    implementation 'org.mapsforge:mapsforge-map-android:0.25.0'
+    implementation 'org.mapsforge:mapsforge-themes:0.25.0'
+}
