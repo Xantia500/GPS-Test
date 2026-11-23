@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PALETTE SOMBRE (mode nuit) — celle de la v5.4, conservée à l'identique.
+
+  Les huit premiers noms sont les mêmes que dans values/colors.xml : c'est
+  le contrat. Seules les valeurs changent. Les quatre derniers (jetons de
+  dessin) sont identiques dans les deux fichiers, sauf le segment éteint.
+-->
+<resources>
+    <!-- Surfaces -->
+    <color name="gps_bg">#FF0B1A0F</color>
+    <color name="gps_card">#FF14261A</color>
+
+    <!-- Accents -->
+    <color name="gps_green">#FF64DD17</color>
+    <color name="gps_green_dim">#FF2E7D32</color>
+    <color name="gps_amber">#FFFFC107</color>
+    <color name="gps_red">#FFE53935</color>
+
+    <!-- Textes -->
+    <color name="gps_text">#FFE8F5E9</color>
+    <color name="gps_text_dim">#FF9E9E9E</color>
+
+    <!-- Jetons de dessin (identiques au mode clair, sauf le segment éteint) -->
+    <color name="gps_signal">#FF00A83B</color>
+    <color name="gps_warn">#FFE08A00</color>
+    <color name="gps_danger">#FFEF5350</color>   <!-- rouge plus clair en nuit -->
+    <color name="gps_alert">#FFD32F2F</color>
+    <color name="gps_seg_dim">#FF1B3320</color>   <!-- segment ÉTEINT : sombre -->
+</resources>

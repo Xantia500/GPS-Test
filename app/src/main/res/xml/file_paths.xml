@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chemins exposés par FileProvider.
+
+  POURQUOI CE FICHIER EXISTE
+  Les traces GPX sont écrites dans getExternalFilesDir(null), c'est-à-dire
+  /storage/emulated/0/Android/data/com.example.gpstest/files/.
+  Ce dossier est :
+    - visible par l'app, en lecture et écriture ;
+    - INVISIBLE pour l'utilisateur depuis un gestionnaire de fichiers moderne
+      (Android 11+ masque le dossier Android/data) ;
+    - INACCESSIBLE aux autres applications sans partage explicite.
+
+  Autrement dit : sans ce mécanisme, l'utilisateur enregistre des traces qu'il
+  ne peut NI voir, NI copier, NI ouvrir dans QGIS. C'est un défaut structurel,
+  pas un détail — un enregistreur dont on ne peut pas sortir les données n'est
+  pas un enregistreur.
+
+  FileProvider règle le problème proprement : on déclare ici ce qui est
+  partageable, et on passe des URI "content://" aux autres apps (partage,
+  « Enregistrer sous », ouverture dans OsmAnd/QGIS). Aucun stockage global,
+  aucune permission supplémentaire.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- getExternalFilesDir(null) -->
+    <external-files-path
+        name="traces"
+        path="." />
+    <!-- getFilesDir() : au cas où l'on écrirait un jour en interne -->
+    <files-path
+        name="interne"
+        path="." />
+</paths>

@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/gps_bg"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/tvOfflineMapsTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cartes hors ligne"
+        android:textColor="@color/gps_text"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvOfflineMapsIntro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:text="Téléchargez uniquement les régions dont vous avez besoin. Les cartes vectorielles restent disponibles sans réseau."
+        android:textColor="@color/gps_text_dim"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="10dp">
+
+        <Button
+            android:id="@+id/btnOfflineBack"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="64dp"
+            android:text="Retour"
+            android:textSize="12sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+
+        <Button
+            android:id="@+id/btnOfflineUp"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:minWidth="64dp"
+            android:text="↑ Dossier parent"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnOfflineRefresh"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:minWidth="64dp"
+            android:text="Actualiser"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_green_dim"
+            android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="6dp">
+
+        <EditText
+            android:id="@+id/etOfflineMapSearch"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_weight="1"
+            android:hint="Rechercher une région…"
+            android:singleLine="true"
+            android:inputType="textCapWords"
+            android:textColor="@color/gps_text"
+            android:textColorHint="@color/gps_text_dim"
+            android:backgroundTint="@color/gps_green_dim"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnOfflineMapView"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:text="Carte"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+
+        <Button
+            android:id="@+id/btnOfflineMapReset"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:text="Recentrer"
+            android:textSize="10sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/offlineMapSelectionFrame"
+        android:layout_width="match_parent"
+        android:layout_height="244dp"
+        android:layout_marginTop="6dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvOfflineMapLegend"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:text="Bleu : disponible   Vert : installée   Orange : mise à jour · Contours vectoriels .poly, grille géographique sans tuiles"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvOfflineMapsPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="6dp"
+        android:paddingBottom="4dp"
+        android:text="Europe / France"
+        android:textColor="@color/gps_text"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvOfflineMapsStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="3dp"
+        android:paddingBottom="5dp"
+        android:text="Chargement du catalogue…"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/offlineDownloadPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:background="@color/gps_card"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvOfflineDownloadTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/pbOfflineDownload"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginTop="8dp"
+            android:max="1000"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/tvOfflineDownloadProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnOfflineCancelDownload"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_gravity="end"
+            android:text="Annuler le téléchargement"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:paddingTop="6dp">
+
+        <LinearLayout
+            android:id="@+id/offlineMapEntries"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/tvOfflineMapsAttribution"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="7dp"
+        android:text="Données © OpenStreetMap contributors · ODbL 1.0 · Toucher pour consulter la licence"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp" />
+</LinearLayout>

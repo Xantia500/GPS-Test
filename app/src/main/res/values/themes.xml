@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      THÈME DE L'APPLICATION — suit le téléphone par défaut.
+
+      `DayNight` est le point central : cette famille de thèmes bascule seule
+      entre la variante claire et la variante sombre selon `uiMode` du
+      système. Aucune ligne de Java n'est nécessaire pour « suivre le
+      téléphone » : c'est le système qui décide à la création de l'Activity.
+
+      Les trois items ci-dessous changent RÉELLEMENT entre clair et sombre :
+      ils sont donc tirés de couleurs déclarées dans values/ ET
+      values-night/. Les écrire en dur (comme avant : #FF1B5E20) aurait figé
+      la barre de statut en vert sombre même en mode clair.
+    -->
+    <style name="Theme.GpsTest" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/gps_green_dim</item>
+        <item name="colorPrimaryVariant">@color/gps_green_dim</item>
+        <!--
+          colorOnPrimary = couleur du texte POSÉ SUR colorPrimary.
+
+          CORRECTIF D'UN DÉFAUT RÉEL : j'avais mis @color/gps_text, qui vaut
+          #14261A en mode clair. Sur le vert foncé #1B5E20, cela donne un
+          contraste de 2,02:1 — le bouton principal devient ILLISIBLE en
+          mode clair, alors qu'il était parfait en mode sombre. C'est le
+          piège classique du thème : un jeton correct dans un mode et faux
+          dans l'autre.
+
+          La couleur ne doit donc PAS dépendre du thème : le vert foncé est
+          foncé dans les deux modes, donc le texte dessus doit être clair
+          dans les deux modes. On utilise une constante.
+        -->
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorSecondary">@color/gps_green</item>
+        <item name="colorOnSecondary">@color/gps_bg</item>
+        <item name="colorOnBackground">@color/gps_text</item>
+        <item name="colorOnSurface">@color/gps_text</item>
+
+        <!-- Barre de statut : pas de texte blanc sur fond clair -->
+        <item name="android:statusBarColor">@color/gps_card</item>
+        <item name="android:navigationBarColor">@color/gps_card</item>
+
+        <!-- L'application dessine ses propres fonds : on désactive le fond
+             du thème pour éviter un aplat blanc sous nos layouts sombres. -->
+        <item name="android:windowBackground">@color/gps_bg</item>
+    </style>
+
+    <!--
+      DIALOGUES : AlertDialog utilise ce thème pour ses fenêtres.
+      Sans une variante DayNight explicite, le dialogue de confirmation de
+      démarrage peut apparaître clair sur une app sombre (ou l'inverse) —
+      c'est le défaut classique des AlertDialog construits à la main.
+    -->
+    <style name="ThemeOverlay.GpsTest.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorOnSurface">@color/gps_text</item>
+        <item name="android:textColorPrimary">@color/gps_text</item>
+    </style>
+</resources>

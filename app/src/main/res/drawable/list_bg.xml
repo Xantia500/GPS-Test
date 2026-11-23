@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FOND DES LISTES.
+
+  POURQUOI CE FICHIER EXISTE : un ListView est TRANSPARENT par défaut. Sur un
+  thème sombre, cela ne se voyait pas — le texte clair tombait sur le fond
+  sombre de l'écran. En mode clair, le même texte reste… clair (hérité du
+  thème) et devient INVISIBLE sur le fond clair. La liste des satellites
+  aurait disparu de l'écran, sans aucune erreur.
+
+  On donne donc un fond opaque aux listes, tiré de @color/gps_card : gris
+  très clair le jour, vert très sombre la nuit. C'est le genre de défaut
+  qu'aucune compilation ne détecte — il faut lire la hiérarchie des vues.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/gps_card" />
+    <corners android:radius="4dp" />
+</shape>

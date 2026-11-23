@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+
+    <!-- Constellation + numéro de satellite (PRN) -->
+    <TextView
+        android:id="@+id/tvSatName"
+        android:layout_width="86dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/gps_text"
+        android:textSize="11sp"
+        android:fontFamily="monospace" />
+
+    <!-- Bande L1 / L5 -->
+    <TextView
+        android:id="@+id/tvSatBand"
+        android:layout_width="30dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/gps_amber"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace" />
+
+    <!-- Barre de C/N0 -->
+    <ProgressBar
+        android:id="@+id/pbSatSnr"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="0dp"
+        android:layout_height="8dp"
+        android:layout_weight="1"
+        android:layout_marginStart="5dp"
+        android:layout_marginEnd="5dp"
+        android:max="100" />
+
+    <!-- Valeur en dBHz -->
+    <TextView
+        android:id="@+id/tvSatSnr"
+        android:layout_width="52dp"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp"
+        android:fontFamily="monospace" />
+</LinearLayout>

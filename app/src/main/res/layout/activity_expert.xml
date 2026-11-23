@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/gps_bg"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/tvExpertHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/gps_amber"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:text="@string/expert_header" />
+
+    <!-- Horloge 7 segments -->
+    <com.example.gpstest.SevenSegmentView
+        android:id="@+id/clock7seg"
+        android:layout_width="match_parent"
+        android:layout_height="90dp"
+        android:layout_marginTop="8dp" />
+
+    <TextView
+        android:id="@+id/tvClock7Seg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp"
+        android:gravity="center"
+        android:text="@string/expert_clock_label" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Champs CSV (préférences sauvegardées)"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <CheckBox android:id="@+id/cbCsvTime" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Horloge détaillée" android:textSize="10sp" android:textColor="@color/gps_text" />
+        <CheckBox android:id="@+id/cbCsvSignal" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="C/N0 + porteuse" android:textSize="10sp" android:textColor="@color/gps_text" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <CheckBox android:id="@+id/cbCsvDoppler" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Doppler + temps SV" android:textSize="10sp" android:textColor="@color/gps_text" />
+        <CheckBox android:id="@+id/cbCsvPhase" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Phase / ADR" android:textSize="10sp" android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <CheckBox android:id="@+id/cbCsvNmea" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Trames NMEA brutes" android:textSize="10sp" android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <!-- Boutons de journalisation -->
+    <CheckBox
+        android:id="@+id/cbFullTracking"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Full tracking (Android 12+ · batterie ↑ · impact global)"
+        android:textSize="10sp"
+        android:textColor="@color/gps_text" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnLog"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:text="@string/btn_log_start"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_green_dim"
+            android:textColor="@color/gps_text" />
+
+        <Button
+            android:id="@+id/btnClear"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="@string/btn_clear"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text_dim" />
+
+        <Button
+            android:id="@+id/btnSave"
+            android:enabled="false"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="@string/btn_save_csv"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_green" />
+    </LinearLayout>
+
+    <TextView style="@style/SectionTitle" android:text="@string/section_measurements" />
+
+    <TextView
+        android:id="@+id/tvMeasurements"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:textColor="@color/gps_text"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:scrollbars="vertical"
+        android:text="@string/expert_no_measurements" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            style="@style/SectionTitle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/section_nmea" />
+
+        <Button
+            android:id="@+id/btnNmeaClear"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:text="@string/btn_clear"
+            android:textSize="10sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text_dim" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvNmea"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:textColor="@color/gps_green_dim"
+        android:textSize="8sp"
+        android:fontFamily="monospace"
+        android:scrollbars="vertical" />
+
+</LinearLayout>

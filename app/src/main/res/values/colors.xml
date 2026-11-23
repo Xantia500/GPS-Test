@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PALETTE CLAIRE (valeurs par défaut = jour).
+
+  ══════════════════════════════════════════════════════════════════════
+  POURQUOI CES COULEURS ET PAS D'AUTRES
+  ══════════════════════════════════════════════════════════════════════
+
+  Une app GPS s'utilise DEHORS, souvent en plein soleil. Le mode clair n'est
+  donc pas décoratif : c'est le mode où l'écran doit rester lisible quand le
+  soleil tape dessus. Un fond blanc pur + texte noir pur serait le plus
+  lisible, mais fatigue les yeux le soir ; un fond blanc cassé (#FFF7FAF7)
+  garde 95 % de la lisibilité en réduisant l'éblouissement.
+
+  Le vert est conservé (identité de l'app) mais ASSOMBRI : le vert vif
+  #64DD17 sur fond blanc a un contraste de 1,9:1 — illisible, et un échec
+  aux normes d'accessibilité. #2E7D32 sur blanc monte à 4,8:1, qui passe.
+
+  ══════════════════════════════════════════════════════════════════════
+  RÈGLE ABSOLUE : LES NOMS NE CHANGENT PAS ENTRE JOUR ET NUIT
+  ══════════════════════════════════════════════════════════════════════
+
+  values/colors.xml et values-night/colors.xml déclarent EXACTEMENT les
+  mêmes huit noms, avec des valeurs différentes. Le code et les layouts ne
+  connaissent que les noms (@color/gps_bg, @color/gps_text…).
+
+  C'est ce qui permet de changer de thème sans toucher une seule ligne de
+  code : Android choisit le fichier selon le mode nuit du téléphone (ou
+  selon le mode forcé, voir ThemeManager).
+-->
+<resources>
+    <!-- Surfaces -->
+    <color name="gps_bg">#FFF7FAF7</color>       <!-- fond général, blanc cassé -->
+    <color name="gps_card">#FFE6EBE6</color>     <!-- boutons et cartes -->
+
+    <!-- Accents -->
+    <color name="gps_green">#FF2E7D32</color>     <!-- accent lisible sur blanc -->
+    <color name="gps_green_dim">#FF1B5E20</color> <!-- fond de bouton principal -->
+    <color name="gps_amber">#FFB26A00</color>     <!-- ambre assombri : lisible sur clair -->
+    <color name="gps_red">#FFC62828</color>       <!-- rouge assombri -->
+
+    <!-- Textes -->
+    <color name="gps_text">#FF14261A</color>      <!-- texte principal, presque noir -->
+    <color name="gps_text_dim">#FF5A6B5F</color>  <!-- texte secondaire -->
+
+    <!--
+      JETONS POUR LES VUES DESSINÉES AU CANVAS.
+
+      SkyView et SevenSegmentView peignent directement des pixels : ils ne
+      peuvent pas utiliser @color (ils n'ont pas de layout). Ces deux jetons
+      portent donc les couleurs de dessin, et ils ont la MÊME valeur dans le
+      jour et dans la nuit — encore une fois pour que le code n'ait pas à
+      savoir quel thème est actif.
+
+        - le vert de signal reste vif : c'est un point lumineux sur un fond
+          neutre dans les deux modes (comme une LED) ;
+        - le segment ÉTEINT de l'afficheur 7 segments est ce qui doit
+          changer : sombre sur fond noir, clair sur fond blanc. Sinon on ne
+          verrait plus rien sur l'écran clair.
+    -->
+    <color name="gps_signal">#FF00A83B</color>    <!-- vert de signal, vif -->
+    <color name="gps_warn">#FFE08A00</color>      <!-- ambre de signal -->
+    <color name="gps_danger">#FFC62828</color>    <!-- rouge : pas de fix -->
+    <!-- Bandeau d'avertissement au-dessus de la carte, hors ligne.
+         Semi-transparent NOIR + texte blanc : lisible par-dessus une carte
+         claire comme sur un fond de tuiles manquantes. -->
+    <color name="map_banner_bg">#CC000000</color>
+    <color name="map_banner_text">#FFFFFFFF</color>
+    <color name="gps_alert">#FFD32F2F</color>     <!-- rouge de signal -->
+    <color name="gps_seg_dim">#FFC8D6CA</color>   <!-- segment 7-seg ÉTEINT (clair) -->
+</resources>

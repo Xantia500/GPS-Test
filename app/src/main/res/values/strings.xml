@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Test</string>
+
+    <!-- En-tête -->
+    <string name="status_waiting">En attente du GPS…</string>
+    <string name="status_fix">Position acquise</string>
+    <string name="status_no_fix">Pas de position</string>
+    <string name="status_paused">En pause — économie batterie</string>
+
+    <!-- Boutons -->
+    <string name="btn_start">DÉMARRER</string>
+    <string name="btn_stop">ARRÊTER</string>
+    <string name="btn_reset">RAZ MAX</string>
+
+    <!-- Sections -->
+    <string name="section_position">POSITION</string>
+    <string name="section_signal">SIGNAL</string>
+    <string name="section_velocity">VITESSE / CAP</string>
+    <string name="section_sky">CARTE DU CIEL</string>
+    <string name="section_time">TEMPS</string>
+
+    <!-- Champs -->
+    <string name="label_latitude">Latitude</string>
+    <string name="label_longitude">Longitude</string>
+    <string name="label_altitude">Altitude</string>
+    <string name="label_accuracy">Précision</string>
+    <string name="label_satellites">Satellites (vus / utilisés)</string>
+    <string name="label_speed">Vitesse</string>
+    <string name="label_bearing">Cap</string>
+    <string name="label_ttff">TTFF</string>
+    <string name="label_elapsed">Durée de session</string>
+    <string name="label_max_sats">Max satellites</string>
+    <string name="label_max_snr">Max C/N0</string>
+
+    <!-- Carte du ciel -->
+    <string name="sky_north">N</string>
+    <string name="sky_east">E</string>
+    <string name="sky_south">S</string>
+    <string name="sky_west">O</string>
+    <string name="sky_empty">Aucune donnée satellite</string>
+
+    <!-- Divers -->
+    <string name="placeholder">—</string>
+
+    <!-- Nouvelles fonctions -->
+    <string name="btn_agps">AGPS RAZ</string>
+    <string name="btn_gpx_start">TRACE ▶</string>
+    <string name="btn_gpx_stop">TRACE ■</string>
+    <string name="btn_expert">EXPERT</string>
+    <string name="btn_log_start">MESURER</string>
+    <string name="btn_log_stop">STOP</string>
+    <string name="btn_clear">EFFACER</string>
+    <string name="btn_save_csv">CSV</string>
+    <string name="label_datum">Datum géodésique</string>
+    <string name="label_datum_pos">Position convertie</string>
+    <string name="label_fix_quality">Qualité du fix</string>
+    <string name="label_pdop">PDOP</string>
+    <string name="label_hdop">HDOP</string>
+    <string name="label_vdop">VDOP</string>
+    <string name="label_compass">Boussole</string>
+    <string name="label_gpx">Trace GPX</string>
+    <string name="section_dop">QUALITÉ / DOP</string>
+    <string name="section_measurements">MESURES BRUTES (CSV)</string>
+    <string name="section_nmea">TRAMES NMEA</string>
+    <string name="expert_header">Mesures brutes GNSS</string>
+    <string name="expert_clock_label">Horloge 7 segments (heure locale)</string>
+    <string name="expert_no_measurements">(aucune mesure)</string>
+
+    <string name="label_bands">Bandes L1 / L5</string>
+    <string name="label_dop_compare">DOP récepteur / estimation géométrique</string>
+    <string name="band_detecting">Bandes : détection en cours…</string>
+    <string name="label_utm">UTM</string>
+    <string name="label_gps_time">Heure GPS (UTC)</string>
+    <string name="label_sun">Soleil</string>
+    <string name="label_moon">Lune</string>
+    <string name="label_nmea_speed">Vitesse NMEA</string>
+    <string name="notif_title">GPS Test — suivi actif</string>
+    <string name="notif_channel_name">Suivi GPS</string>
+    <string name="notif_channel_desc">Suivi GPS en cours</string>
+
+    <!-- v5 : politique d'arrière-plan -->
+    <string name="notif_title_paused">GPS Test — suivi en pause</string>
+    <string name="notif_paused">Pause (économie batterie) — reprend à l\'allumage de l\'écran</string>
+    <string name="notif_pause">Pause</string>
+    <string name="notif_resume">Reprendre</string>
+    <string name="btn_settings">RÉGLAGES</string>
+    <string name="btn_close">FERMER</string>
+    <string name="share_chooser_title">Partager la trace</string>
+    <string name="btn_share_latest">PARTAGER LA DERNIÈRE TRACE</string>
+    <string name="settings_section_data">DONNÉES ENREGISTRÉES</string>
+    <string name="data_storage_explanation">Les traces et mesures sont stockées dans le dossier privé de l\'application. Elles sont conservées jusqu\'à leur suppression et ne sont jamais envoyées sur Internet.</string>
+    <string name="data_none">Aucun fichier pour le moment.</string>
+    <string name="data_summary">%1$d traces GPX · %2$d fichiers CSV · %3$s</string>
+    <string name="data_share_failed">Aucune trace à partager.</string>
+    <string name="warn_gpx_applied">GPX %1$s : appliqué au prochain segment de trace.</string>
+    <string name="warn_policy_suspend">Trou assumé : chaque reprise après extinction ouvre un NOUVEAU fichier GPX (-p2, -p3…). Deux fichiers honnêtes valent mieux qu\'une trace trouée.</string>
+    <string name="warn_policy_keep_on">L\'écran reste allumé tant que l\'app est visible. Batterie : c\'est le poste de consommation le plus lourd.</string>
+    <string name="warn_policy_continue">Les points continuent d\'arriver écran éteint. La notification permanente indique que le suivi est actif.</string>
+
+    <!-- Écran Réglages -->
+    <string name="settings_title">Réglages</string>
+    <string name="settings_section_background">COMPORTEMENT ÉCRAN ÉTEINT</string>
+    <string name="settings_section_gpx">FORMAT DE TRACE GPX</string>
+    <string name="settings_background_intro">Quand l\'écran s\'éteint, l\'application peut continuer à enregistrer ou se mettre en pause. Le prix se paie en batterie.</string>
+    <string name="settings_gpx_intro">Deux versions du même format : 1.0 pour les outils anciens, 1.1 pour le standard actuel.</string>
+    <string name="settings_note_non_persistant">Ces réglages sont enregistrés sur l\'appareil et conservés d\'une session à l\'autre.</string>
+
+    <!-- ══════════ v5.4 : destination des traces ══════════ -->
+    <string name="label_dest">Destination</string>
+    <string name="dest_section">DESTINATION DES TRACES</string>
+    <string name="dest_explanation">Choisissez où vos traces sont enregistrées. Vous pourrez les retrouver dans votre gestionnaire de fichiers ou en branchant le téléphone sur un ordinateur.</string>
+    <string name="dest_preset_download">Téléchargements</string>
+    <string name="dest_preset_documents">Documents</string>
+    <string name="dest_preset_app">Dossier de l\'application</string>
+    <string name="dest_choose_other">Choisir un autre dossier…</string>
+    <string name="dest_lost">Le dossier choisi n\'est plus accessible. Les traces restent enregistrées dans le dossier de l\'application, rien n\'est perdu.</string>
+    <string name="dest_app_warning">Ce dossier est privé : il disparaît si vous désinstallez l\'application, et il est invisible dans la plupart des gestionnaires de fichiers.</string>
+    <string name="dest_set_ok">Destination enregistrée : %1$s</string>
+    <string name="dest_set_failed">Impossible d\'écrire dans ce dossier. Choisissez-en un autre.</string>
+
+    <!-- Confirmation avant démarrage -->
+    <string name="start_confirm_title">Démarrer l\'enregistrement ?</string>
+    <string name="start_confirm_body">Votre trace sera enregistrée dans :</string>
+    <string name="start_confirm_file">Fichier : %1$s</string>
+    <string name="start_confirm_go">DÉMARRER</string>
+    <string name="start_confirm_cancel">Annuler</string>
+    <string name="start_confirm_publish_note">La trace est enregistrée en continu dans l’application, puis copiée dans ce dossier à la fermeture de chaque segment.</string>
+
+    <!-- État de la publication -->
+    <string name="publish_ok">Trace enregistrée dans le dossier choisi</string>
+    <string name="publish_wait">Copie externe à la fermeture du segment ; trace locale enregistrée en continu</string>
+    <string name="publish_err">Dossier choisi inaccessible — trace conservée dans le dossier de l\'application</string>
+    <!-- ══════════ v5.5 : thème ══════════ -->
+    <string name="theme_section">APPARENCE</string>
+    <string name="theme_intro">Par défaut, l\'application suit le mode clair ou sombre de votre téléphone. Vous pouvez forcer l\'un des deux.</string>
+    <string name="theme_system">Suivre le téléphone</string>
+    <string name="theme_light">Clair</string>
+    <string name="theme_dark">Sombre</string>
+    <string name="theme_system_desc">L\'application change automatiquement : claire le jour, sombre la nuit, comme le reste de votre téléphone.</string>
+    <string name="theme_light_desc">Toujours clair. Plus lisible en plein soleil.</string>
+    <string name="theme_dark_desc">Toujours sombre. Repose les yeux la nuit et dans une voiture.</string>
+    <!-- ══════════ v5.6 : perte de signal, unités ══════════ -->
+    <string name="status_signal_lost">Signal GPS perdu depuis %1$d s</string>
+    <string name="settings_units_section">UNITÉS</string>
+    <string name="settings_units_intro">Choisissez le système d\'unités affiché. Les traces GPX restent toujours en unités internationales (mètres, degrés) : c\'est la norme.</string>
+    <string name="units_metric">Métrique (m, km, km/h)</string>
+    <string name="units_imperial">Impérial (ft, mi, mph)</string>
+    <string name="units_nautical">Maritime (m, NM, nœuds)</string>
+    <string name="settings_voice_section">ALERTES VOCALES</string>
+    <string name="settings_voice_intro">En cas de perte du signal GPS, l\'application vous prévient à voix haute, dans la langue de votre téléphone. Le premier avertissement arrive après le délai choisi ci-dessous : un passage sous un pont ou un arbre ne déclenche donc rien.</string>
+    <string name="settings_voice_toggle">Annoncer la perte de signal GPS</string>
+    <string name="settings_voice_desc">Le premier intervalle sert de délai d\'attente. Le retour du signal n\'est annoncé qu\'une fois, et seulement s\'il se maintient.</string>
+    <string name="settings_voice_unavailable">Synthèse vocale indisponible sur cet appareil.</string>
+    <string name="settings_voice_repeat_label">Rappeler la perte de signal</string>
+    <string name="settings_voice_max_label">Nombre maximal d\'alertes par perte</string>
+    <string name="settings_voice_recovery">Annoncer aussi le retour du signal</string>
+    <string name="voice_repeat_never">Jamais (une seule alerte)</string>
+    <string name="voice_repeat_30s">Toutes les 30 s</string>
+    <string name="voice_repeat_1min">Toutes les minutes</string>
+    <string name="voice_repeat_2min">Toutes les 2 minutes</string>
+    <string name="voice_repeat_5min">Toutes les 5 minutes</string>
+    <string name="voice_max_1">1 fois</string>
+    <string name="voice_max_3">3 fois</string>
+    <string name="voice_max_5">5 fois</string>
+    <string name="voice_max_10">10 fois</string>
+    <string name="voice_max_inf">Sans limite</string>
+    <string name="status_signal_lost_long">Signal GPS perdu \u2014 %1$s</string>
+    <string name="status_signal_reacquiring">Reprise du signal en cours\u2026 (%1$d/3)</string>
+    <string name="status_signal_invalid">Réception invalide : %1$s</string>
+    <!-- Dire COMBIEN, pas seulement "pas assez" : l'utilisateur peut alors
+         voir s'il lui manque un satellite ou dix. -->
+    <string name="status_sat_short">%1$d / %2$d satellites utilisés</string>
+
+    <!-- ══════════ v5.10 : bandeau permanent ══════════ -->
+    <string name="hud_fix_3d">3D fix</string>
+    <string name="hud_fix_2d">2D fix</string>
+    <string name="hud_fix_none">No fix</string>
+    <string name="hud_sats">%1$d/%2$d sats</string>
+    <string name="hud_battery_charging">%1$d%% ⚡</string>
+    <string name="hud_battery">%1$d%%</string>
+    <string name="hud_battery_unknown">\u2014</string>
+
+    <!-- ══════════ v5.10 : espacement des points ══════════ -->
+    <string name="settings_sampling_section">POINTS ENREGISTRÉS</string>
+    <string name="settings_sampling_intro">Deux critères indépendants. Un point est écrit dès que l\'UN OU L\'AUTRE est atteint — jamais les deux à la fois, sinon une trace serait presque vide quand vous ralentissez.</string>
+    <string name="settings_sampling_distance">Distance minimale entre deux points</string>
+    <string name="settings_sampling_time">Temps maximal entre deux points</string>
+    <string name="sampling_distance_none">Aucune (tout enregistrer)</string>
+    <string name="sampling_time_none">Aucun</string>
+    <string name="mode_section">MODE D\'ENREGISTREMENT</string>
+    <string name="mode_intro">Le mode fixe à quel point la trace est détaillée. En marche, on avance lentement : un point tous les 20 m suffit. En voiture, 50 m. Choisissez « Personnalisé » pour régler les deux valeurs vous-même.</string>
+    <string name="mode_walk">Marche / randonnée</string>
+    <string name="mode_bike">VTT / cyclisme</string>
+    <string name="mode_car">Véhicule motorisé</string>
+    <string name="mode_custom">Personnalisé</string>
+    <string name="mode_custom_hint">Les deux réglages ci-dessous ne s\'appliquent qu\'en mode personnalisé.</string>
+    <string name="mode_summary">%1$s — un point tous les %2$s (ou toutes les %3$s)</string>
+    <string name="mode_accuracy">Précision minimale acceptée : %1$s. Au-delà, le point est écarté.</string>
+    <string name="mode_pp_section">NETTOYAGE À LA FIN</string>
+    <string name="mode_pp_intro">À la fin d\'une session, une copie nettoyée de la trace est créée à côté de l\'original, qui n\'est jamais modifié. Le nettoyage retire les points aberrants et simplifie la trace en gardant sa forme.</string>
+    <string name="mode_pp_enabled">Nettoyer la trace à la fin</string>
+    <string name="mode_pp_tolerance">Simplification (Douglas-Peucker), tolérance</string>
+    <string name="mode_pp_off">Aucune simplification</string>
+    <string name="expert_csv_saved_title">Mesures enregistrées</string>
+    <string name="expert_csv_saved_message">Fichier créé :\n\n%1$s\n\n%2$d octets.\n\nIl est dans le même dossier que vos traces GPX. Vous pouvez le récupérer depuis les réglages (« Fichiers ») ou en branchant le téléphone en USB.</string>
+    <string name="expert_csv_ok">Compris</string>
+    <string name="mode_reject_banner">Point non enregistré \u2014 %1$s (mode %2$s)</string>
+    <string name="sampling_hint">Un fichier de 2 h en marche rapide fait environ 400 points avec ces réglages, contre 7 200 sans filtre.</string>
+
+    <!-- ══════════ v5.10 : carte et relecture ══════════ -->
+    <string name="menu_map">Carte</string>
+    <string name="map_title">Carte et traces</string>
+    <string name="map_offline_manager">Cartes hors ligne</string>
+    <string name="offline_maps_title">Cartes hors ligne</string>
+    <string name="map_load">Ouvrir une trace</string>
+    <string name="map_follow">Suivre ma position</string>
+    <string name="map_follow_on">Suivi actif</string>
+    <string name="map_trace_loaded">%1$s — %2$s, %3$s, %4$s</string>
+    <string name="map_trace_none">Aucune trace chargée. Touchez « Ouvrir une trace » pour relire un fichier GPX.</string>
+    <string name="map_trace_empty">Fichier lu, mais aucun point exploitable.</string>
+    <string name="map_trace_error">Lecture impossible : %1$s</string>
+    <string name="map_import_progress">Import GPX en cours…</string>
+    <string name="map_import_opening">Ouverture du document GPX…</string>
+    <string name="map_import_analyzing">Analyse XML · %1$d points</string>
+    <string name="map_import_preparing">Préparation de l’affichage…</string>
+    <string name="map_import_preparing_points">Préparation · %1$d / %2$d points</string>
+    <string name="map_import_bounds">Calcul de l’emprise · %1$d / %2$d points</string>
+    <string name="map_import_cancel">Annuler</string>
+    <string name="map_import_cancelling">Annulation de l’importation…</string>
+    <string name="map_import_cancelled">Import GPX annulé. La trace précédemment affichée est conservée.</string>
+    <string name="map_my_position">Ma position</string>
+    <string name="map_zoom_hint">Touchez deux fois pour zoomer, deux doigts pour déplacer et zoomer.</string>
+    <string name="map_no_network">Fond de carte indisponible : les tuiles se téléchargent quand une connexion existe. Votre position et vos traces restent affichées.</string>
+    <!-- Textes PRONONCÉS. Doivent rester courts : ils sont parlés. -->
+    <string name="voice_text_loss">Signal GPS perdu.</string>
+    <string name="voice_text_recovery">Signal GPS valide.</string>
+    <string name="signal_relost_hint">Aucune position enregistrée tant que la réception n\'est pas rétablie.</string>
+
+    <!-- ═══════════════ BOUSSOLE (v5.14) ═══════════════ -->
+    <string name="compass_section">BOUSSOLE</string>
+    <string name="label_compass_north_ref">Nord de référence</string>
+    <string name="label_declination">Déclinaison</string>
+    <string name="compass_absent">Boussole absente : cet appareil n\'a pas de capteur de rotation</string>
+    <string name="compass_waiting">En attente du capteur…</string>
+    <string name="compass_declination_unknown">Déclinaison inconnue : cap magnétique affiché</string>
+
+    <string name="settings_compass_section">BOUSSOLE</string>
+    <string name="settings_compass_intro">Le capteur de rotation donne un cap MAGNÉTIQUE. Le nord magnétique s\'écarte du nord géographique d\'un angle appelé déclinaison, qui dépend du lieu : environ +1,5° à Paris, −14° à Montréal, +15° à Vancouver. Choisissez le nord auquel vous voulez lire vos caps.</string>
+    <string name="compass_north_magnetic">Nord magnétique (brut du capteur)</string>
+    <string name="compass_north_true">Nord vrai (corrigé de la déclinaison)</string>
+    <string name="compass_north_true_note">La déclinaison est calculée à la position courante ; sans position, le cap reste magnétique et l\'écran le signale.</string>
+    <string name="compass_tilted">Appareil incliné à %.0f° : cap peu fiable, tenez-le à plat</string>
+    <string name="compass_magnetic_disturbed">Champ magnétique perturbé : éloignez-vous de toute masse métallique</string>
+</resources>

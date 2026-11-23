@@ -1,0 +1,644 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/gps_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="24dp">
+
+        <!-- ══════════ UNITÉS (v5.6) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_units_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_units_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <RadioGroup
+            android:id="@+id/rgUnits"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbUnitsMetric"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/units_metric"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/rbUnitsImperial"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/units_imperial"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/rbUnitsNautical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/units_nautical"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <!-- ══════════ ALERTES VOCALES (v5.6) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_voice_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_voice_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/cbVoiceAlert"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_voice_toggle"
+            android:textColor="@color/gps_text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvVoiceDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="32dp"
+            android:paddingBottom="10dp"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp" />
+
+        <!--
+          BLOC DÉPENDANT : grisé et désactivé quand l'alerte vocale est
+          décochée. Un réglage visible mais sans effet est un piège : on croit
+          l'avoir réglé. On le montre quand même (l'utilisateur voit ce qu'il
+          retrouverait), mais inerte.
+        -->
+        <LinearLayout
+            android:id="@+id/grpVoiceOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_voice_repeat_label"
+                android:textColor="@color/gps_text"
+                android:textSize="13sp"
+                android:paddingTop="4dp" />
+
+            <Spinner
+                android:id="@+id/spVoiceRepeat"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:backgroundTint="@color/gps_green_dim" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_voice_max_label"
+                android:textColor="@color/gps_text"
+                android:textSize="13sp"
+                android:paddingTop="8dp" />
+
+            <Spinner
+                android:id="@+id/spVoiceMax"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:backgroundTint="@color/gps_green_dim" />
+
+            <CheckBox
+                android:id="@+id/cbVoiceRecovery"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:text="@string/settings_voice_recovery"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ══════════ MODE (v5.11) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/mode_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <Spinner
+            android:id="@+id/spTrackMode"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="@color/gps_green_dim" />
+
+        <TextView
+            android:id="@+id/tvModeSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:paddingBottom="2dp"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvModeAccuracy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="10dp"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp" />
+
+        <!-- ══════════ POINTS ENREGISTRÉS (v5.10) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_sampling_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/tvSamplingIntro"
+            android:text="@string/settings_sampling_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/tvSamplingDistance"
+            android:text="@string/settings_sampling_distance"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:paddingTop="4dp" />
+
+        <Spinner
+            android:id="@+id/spMinDistance"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="@color/gps_green_dim" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/tvSamplingTime"
+            android:text="@string/settings_sampling_time"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:paddingTop="8dp" />
+
+        <Spinner
+            android:id="@+id/spMinTime"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="@color/gps_green_dim" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:paddingBottom="10dp"
+            android:text="@string/sampling_hint"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:textStyle="italic" />
+
+        <!-- ══════════ NETTOYAGE (v5.11) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/mode_pp_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_pp_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/cbPostProcess"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_pp_enabled"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvPpTolerance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_pp_tolerance"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:paddingTop="6dp" />
+
+        <Spinner
+            android:id="@+id/spPpTolerance"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:backgroundTint="@color/gps_green_dim" />
+
+
+        <!-- ══════════ APPARENCE (v5.5) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/theme_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/theme_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <RadioGroup
+            android:id="@+id/rgTheme"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbThemeSystem"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/theme_system"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvThemeSystemDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rbThemeLight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/theme_light"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvThemeLightDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rbThemeDark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/theme_dark"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvThemeDarkDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_section_background" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_background_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <RadioGroup
+            android:id="@+id/rgBackground"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbContinue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvContinueDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rbKeepOn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvKeepOnDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rbSuspend"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvSuspendDesc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/tvWarnSegment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp"
+            android:text=""
+            android:textColor="@color/gps_amber"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_section_gpx" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_gpx_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="6dp" />
+
+        <RadioGroup
+            android:id="@+id/rgGpx"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbGpx11"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="GPX 1.1"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvGpx11Desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rbGpx10"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="GPX 1.0"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvGpx10Desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="32dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <!-- ══════════ DESTINATION DES TRACES (v5.4) ══════════ -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/dest_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/dest_explanation"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvDestPath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvDestWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:paddingBottom="10dp" />
+
+        <RadioGroup
+            android:id="@+id/rgDest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbDestDownload"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dest_preset_download"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/rbDestDocuments"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dest_preset_documents"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/rbDestApp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/dest_preset_app"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btnChooseFolder"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/dest_choose_other"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_section_data" />
+
+        <TextView
+            android:id="@+id/tvDataSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/gps_text"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/data_storage_explanation"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="12sp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvDataPath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnShareLatest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_share_latest"
+            android:backgroundTint="@color/gps_green_dim"
+            android:textColor="@color/gps_text"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/settings_compass_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="6dp"
+            android:text="@string/settings_compass_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp" />
+
+        <RadioGroup
+            android:id="@+id/rgCompassNorth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbNorthMagnetic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/compass_north_magnetic"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/rbNorthTrue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/compass_north_true"
+                android:textColor="@color/gps_text"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:text="@string/compass_north_true_note"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:textStyle="italic" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="18dp"
+            android:text="@string/settings_note_non_persistant"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:textStyle="italic" />
+
+        <Button
+            android:id="@+id/btnCloseSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/btn_close"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+    </LinearLayout>
+</ScrollView>

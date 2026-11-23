@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/gps_bg">
+
+    <!-- Barre de commande au-dessus de la carte -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btnMapLoad"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:text="@string/map_load"
+            android:textSize="12sp"
+            android:backgroundTint="@color/gps_green_dim"
+            android:textColor="@color/gps_text" />
+
+        <Button
+            android:id="@+id/btnMapFollow"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/map_follow"
+            android:textSize="12sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text_dim" />
+
+        <Button
+            android:id="@+id/btnMapOffline"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="@string/map_offline_manager"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="5dp">
+
+        <Button
+            android:id="@+id/btnMapStyle"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="Style de carte"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnMapOrientation"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="Nord en haut"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text_dim" />
+    </LinearLayout>
+
+    <!-- Bandeau d'information sur la trace chargée -->
+    <TextView
+        android:id="@+id/tvMapInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="6dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/mapImportProgressRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="5dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvMapImportProgress"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/map_import_opening"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <Button
+            android:id="@+id/btnMapCancelImport"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:minWidth="72dp"
+            android:text="@string/map_import_cancel"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_text" />
+    </LinearLayout>
+
+    <!-- Le renderer Mapsforge ou le canevas local ajoute sa vue ici. -->
+    <FrameLayout
+        android:id="@+id/mapContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Les moteurs cartographiques locaux ajoutent leur vue ici. -->
+
+        <!-- Message indiquant l'absence de couverture vectorielle locale. -->
+        <ProgressBar
+            android:id="@+id/pbMapLoading"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvMapOffline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@color/map_banner_bg"
+            android:padding="8dp"
+            android:text="@string/map_no_network"
+            android:textColor="@color/map_banner_text"
+            android:textSize="11sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvMapAttribution"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:gravity="end"
+        android:text="© OpenStreetMap contributors"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp" />
+</LinearLayout>

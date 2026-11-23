@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Marqueur de position courante.
+
+  Dessiné en vectoriel plutôt qu'en bitmap : une seule définition sert
+  toutes les densités d'écran, et le cercle extérieur translucide indique
+  la zone d'incertitude sans avoir à dessiner un second overlay.
+
+  Le point est volontairement ENTIÈREMENT opaque au centre, avec un halo :
+  sur un fond de carte clair comme sur un fond sombre, il reste visible.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+
+    <path
+        android:fillColor="#402E7D32"
+        android:pathData="M14,2 A12,12 0 1,0 14,26 A12,12 0 1,0 14,2 Z" />
+    <path
+        android:fillColor="#FF2E7D32"
+        android:pathData="M14,8 A6,6 0 1,0 14,20 A6,6 0 1,0 14,8 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,11 A3,3 0 1,0 14,17 A3,3 0 1,0 14,11 Z" />
+</vector>
