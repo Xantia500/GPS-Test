@@ -1,5 +1,6 @@
 package com.example.gpstest;
 
+import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -205,7 +206,7 @@ public final class GpxWriter {
                     return candidate;
             } catch (NumberFormatException ignored) { }
         }
-        return Double.toString(value);
+        return plainDecimal(value);
     }
 
     public static String cleanedSegmentOpen() { return "    <trkseg>\n"; }
@@ -236,7 +237,14 @@ public final class GpxWriter {
                     return candidate;
             } catch (NumberFormatException ignored) { }
         }
-        return Double.toString(value);
+        return plainDecimal(value);
+    }
+
+    /** Forme lexicale xsd:decimal sans exposant, pour tous les nombres finis. */
+    private static String plainDecimal(double value) {
+        if (!Double.isFinite(value)) throw new IllegalArgumentException("Décimal non fini");
+        String plain = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        return "-0".equals(plain) ? "0" : plain;
     }
 
     /** Construit un GPX 1.1 complet en mémoire. */
@@ -263,6 +271,14 @@ public final class GpxWriter {
 
     /** Une ligne <trkpt>, dans la version demandée. Utilisable en streaming. */
     public static String pointXml(TrackPoint p, Version version) {
+        if (p == null) throw new IllegalArgumentException("Point GPX absent");
+        if (!Double.isFinite(p.lat) || !Double.isFinite(p.lon)
+                || Math.abs(p.lat) > 90.0 || Math.abs(p.lon) > 180.0
+                || (p.lat == 0.0 && p.lon == 0.0)) {
+            throw new IllegalArgumentException("Coordonnées GPX invalides");
+        }
+        if (version == null) throw new IllegalArgumentException("Version GPX absente");
+
         // TAILLE INITIALE RÉALISTE. Sans elle, la capacité par défaut (16)
         // provoque une série de recopies à chaque point — précisément dans la
         // boucle d'écriture qui doit tenir la cadence d'un fix par seconde.
@@ -270,7 +286,7 @@ public final class GpxWriter {
         StringBuilder sb = new StringBuilder(320);
         sb.append(String.format(Locale.ROOT,
                 "      <trkpt lat=\"%.7f\" lon=\"%.7f\">\n", p.lat, p.lon));
-        if (!Double.isNaN(p.elevation)) {
+        if (Double.isFinite(p.elevation) && Math.abs(p.elevation) <= 10_000.0) {
             sb.append(String.format(Locale.ROOT, "        <ele>%.1f</ele>\n", p.elevation));
         }
         // BUG CORRIGÉ (v5.12, trouvé par le banc JPX) : on écrivait TOUJOURS
@@ -283,37 +299,44 @@ public final class GpxWriter {
             sb.append(String.format(Locale.ROOT, "        <time>%s</time>\n",
                     iso8601(p.timeUtcMs)));
         }
-        // <hdop> est standard en GPX 1.1.
-        if (p.hdop != null) {
-            sb.append(String.format(Locale.ROOT, "        <hdop>%.2f</hdop>\n", p.hdop));
-        }
         if (version == Version.V10) {
-            // En GPX 1.0, <speed> et <course> sont des enfants DIRECTS et légaux.
-            if (p.speedMps != null && p.speedMps >= 0) {
+            // GPX 1.0 impose un ordre XSD précis pour les enfants de <trkpt> :
+            // ele, time, course, speed, éléments descriptifs, puis précision.
+            // Ne pas déplacer hdop avant course/speed : un XML bien formé
+            // pourrait sinon être invalide contre le schéma GPX 1.0.
+            if (isValidCourse(p.courseDeg)) {
+                sb.append(String.format(Locale.ROOT, "        <course>%.1f</course>\n", p.courseDeg));
+            }
+            if (isNonNegativeFinite(p.speedMps)) {
                 sb.append(String.format(Locale.ROOT, "        <speed>%.2f</speed>\n", p.speedMps));
             }
-            if (p.courseDeg != null) {
-                sb.append(String.format(Locale.ROOT, "        <course>%.1f</course>\n", p.courseDeg));
+            if (isNonNegativeFinite(p.hdop)) {
+                sb.append(String.format(Locale.ROOT, "        <hdop>%.2f</hdop>\n", p.hdop));
             }
             sb.append("      </trkpt>\n");
             return sb.toString();
         }
 
+        // GPX 1.1 place les champs de précision avant <extensions>.
+        if (isNonNegativeFinite(p.hdop)) {
+            sb.append(String.format(Locale.ROOT, "        <hdop>%.2f</hdop>\n", p.hdop));
+        }
+
         // GPX 1.1 : <speed>, <course>, <accuracy> n'existent plus.
         // On passe par <extensions>, le mécanisme prévu par la spécification.
-        boolean hasExt = (p.speedMps != null && p.speedMps >= 0)
-                || p.courseDeg != null || p.accuracyM != null;
+        boolean hasExt = isNonNegativeFinite(p.speedMps)
+                || isValidCourse(p.courseDeg) || isNonNegativeFinite(p.accuracyM);
         if (hasExt) {
             sb.append("        <extensions>\n");
-            if (p.speedMps != null && p.speedMps >= 0) {
+            if (isNonNegativeFinite(p.speedMps)) {
                 sb.append(String.format(Locale.ROOT,
                         "          <gpstest:speed>%.2f</gpstest:speed>\n", p.speedMps));
             }
-            if (p.courseDeg != null) {
+            if (isValidCourse(p.courseDeg)) {
                 sb.append(String.format(Locale.ROOT,
                         "          <gpstest:course>%.1f</gpstest:course>\n", p.courseDeg));
             }
-            if (p.accuracyM != null) {
+            if (isNonNegativeFinite(p.accuracyM)) {
                 sb.append(String.format(Locale.ROOT,
                         "          <gpstest:accuracy>%.1f</gpstest:accuracy>\n", p.accuracyM));
             }
@@ -321,6 +344,14 @@ public final class GpxWriter {
         }
         sb.append("      </trkpt>\n");
         return sb.toString();
+    }
+
+    private static boolean isNonNegativeFinite(Float value) {
+        return value != null && Float.isFinite(value) && value >= 0.0f;
+    }
+
+    private static boolean isValidCourse(Float value) {
+        return value != null && Float.isFinite(value) && value >= 0.0f && value <= 360.0f;
     }
 
     /** Entête GPX 1.1 (version par défaut). */

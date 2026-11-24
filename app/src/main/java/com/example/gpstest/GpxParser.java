@@ -16,6 +16,7 @@ import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import javax.xml.parsers.SAXParserFactory;
 
 /**
@@ -38,6 +39,10 @@ public final class GpxParser {
     public static final int MAX_SEGMENTS = 20_000;
     public static final int MAX_XML_DEPTH = 64;
     public static final int MAX_SCALAR_CHARS = 16_384;
+    private static final String GPX_10_NAMESPACE = "http://www.topografix.com/GPX/1/0";
+    /** XML Schema xsd:decimal lexical space; scientific notation is not permitted. */
+    private static final Pattern XSD_DECIMAL_PATTERN = Pattern.compile(
+            "[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)");
 
     public interface CancellationToken {
         boolean isCancelled();
@@ -525,11 +530,22 @@ public final class GpxParser {
             return rootNamespaceUri.equals(candidate);
         }
 
+        private boolean isGpx10Document() {
+            // GPX 1.0 a été couramment diffusé sans namespace XML ; on le
+            // reconnaît alors uniquement si version="1.0" est explicite.
+            return GPX_10_NAMESPACE.equals(rootNamespaceUri)
+                    || (rootNamespaceUri.isEmpty() && "1.0".equals(result.version));
+        }
+
         private boolean isPointScalar(String name, String uri) {
             if (isGpxElement(uri)) {
-                // Champs standards GPX (speed/course sont directs en 1.0).
-                return "ele".equals(name) || "time".equals(name) || "speed".equals(name)
-                        || "course".equals(name) || "hdop".equals(name);
+                if ("ele".equals(name) || "time".equals(name) || "hdop".equals(name)) {
+                    return true;
+                }
+                // GPX 1.0 autorise speed/course comme enfants directs de trkpt.
+                // En GPX 1.1 ces deux mesures doivent venir de l'extension GPS-Test
+                // (ou d'une autre extension fournisseur), jamais du namespace GPX.
+                return isGpx10Document() && ("speed".equals(name) || "course".equals(name));
             }
             // Extensions GPS Test dans GPX 1.1. Ne pas interpréter un élément
             // homonyme d'un namespace fournisseur arbitraire comme une mesure.
@@ -568,11 +584,12 @@ public final class GpxParser {
                 && !(lat == 0.0 && lon == 0.0);
     }
 
-    /** Analyse un décimal GPX en notation internationale, sans réparation locale. */
+    /** Analyse un xsd:decimal GPX, sans exposant, NaN, INF ni réparation locale. */
     static double parseDouble(String value) {
         if (value == null) return Double.NaN;
         String text = value.trim();
-        if (text.isEmpty()) return Double.NaN;
+        if (text.isEmpty() || !XSD_DECIMAL_PATTERN.matcher(text).matches())
+            return Double.NaN;
         try {
             double parsed = Double.parseDouble(text);
             return Double.isFinite(parsed) ? parsed : Double.NaN;

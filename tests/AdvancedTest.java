@@ -178,6 +178,46 @@ public class AdvancedTest {
                 "pointXml(1.1) : extensions, pas de speed direct");
         ok(p10.contains("<speed>1.20</speed>") && !p10.contains("<extensions>"),
                 "pointXml(1.0) : speed direct, pas d'extensions");
+        int p10Course = p10.indexOf("<course>312.0</course>");
+        int p10Speed = p10.indexOf("<speed>1.20</speed>");
+        int p10Hdop = p10.indexOf("<hdop>0.90</hdop>");
+        ok(p10Course >= 0 && p10Course < p10Speed && p10Speed < p10Hdop,
+                "pointXml(1.0) : ordre XSD course, speed, hdop");
+        int p11Hdop = p11.indexOf("<hdop>0.90</hdop>");
+        int p11Extensions = p11.indexOf("<extensions>");
+        ok(p11Hdop >= 0 && p11Extensions >= 0 && p11Hdop < p11Extensions,
+                "pointXml(1.1) : hdop précède extensions");
+
+        GpxWriter.TrackPoint unsafeScalars = new GpxWriter.TrackPoint(
+                1763750002000L, 48.0, 2.0, Double.POSITIVE_INFINITY);
+        unsafeScalars.speedMps = Float.POSITIVE_INFINITY;
+        unsafeScalars.courseDeg = Float.NaN;
+        unsafeScalars.hdop = Float.NEGATIVE_INFINITY;
+        unsafeScalars.accuracyM = -1.0f;
+        String safeScalarsXml = GpxWriter.pointXml(unsafeScalars, GpxWriter.Version.V11);
+        ok(!safeScalarsXml.contains("<ele>") && !safeScalarsXml.contains("<hdop>")
+                        && !safeScalarsXml.contains("<extensions>")
+                        && !safeScalarsXml.contains("Infinity") && !safeScalarsXml.contains("NaN"),
+                "pointXml : altitude et champs facultatifs non finis/négatifs omis");
+
+        GpxWriter.TrackPoint excessiveElevation = new GpxWriter.TrackPoint(
+                1763750003000L, 48.0, 2.0, 10000.1);
+        ok(!GpxWriter.pointXml(excessiveElevation, GpxWriter.Version.V11).contains("<ele>"),
+                "pointXml : altitude hors limite ±10 000 m omise");
+
+        boolean nullIslandRejected = false;
+        try {
+            GpxWriter.pointXml(new GpxWriter.TrackPoint(1763750004000L, 0.0, 0.0, 5.0),
+                    GpxWriter.Version.V11);
+        } catch (IllegalArgumentException expected) { nullIslandRejected = true; }
+        ok(nullIslandRejected, "pointXml : coordonnée (0,0) interdite par la politique du projet");
+
+        boolean outOfRangeRejected = false;
+        try {
+            GpxWriter.pointXml(new GpxWriter.TrackPoint(1763750005000L, 91.0, 2.0, 5.0),
+                    GpxWriter.Version.V11);
+        } catch (IllegalArgumentException expected) { outOfRangeRejected = true; }
+        ok(outOfRangeRejected, "pointXml : latitude hors bornes rejetée");
 
         // Noms de fichiers distincts par version
         ok(GpxWriter.fileName(0, GpxWriter.Version.V10).contains("_v10"),

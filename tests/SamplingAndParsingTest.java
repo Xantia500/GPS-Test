@@ -192,6 +192,58 @@ public class SamplingAndParsingTest {
         ok("1.1".equals(spacedResult.version) && "Test".equals(spacedResult.creator),
                 "version/creator extraits d'une racine GPX préfixée");
 
+        // Les champs speed/course directs sont propres à GPX 1.0 ; GPX 1.1
+        // utilise l'extension GPS-Test identifiée par son namespace exact.
+        String directV10 = "<gpx version=\"1.0\" creator=\"legacy\" "
+                + "xmlns=\"http://www.topografix.com/GPX/1/0\"><trk><trkseg>"
+                + "<trkpt lat=\"48\" lon=\"2\"><speed>2.5</speed>"
+                + "<course>359.5</course></trkpt></trkseg></trk></gpx>";
+        GpxParser.Result directV10Result = GpxParser.parse(directV10);
+        ok(directV10Result.pointCount() == 1
+                        && directV10Result.points.get(0).speedMps != null
+                        && Math.abs(directV10Result.points.get(0).speedMps - 2.5f) < 0.001f
+                        && directV10Result.points.get(0).courseDeg != null
+                        && Math.abs(directV10Result.points.get(0).courseDeg - 359.5f) < 0.001f,
+                "GPX 1.0 namespacé : speed/course directs lus");
+
+        String legacyV10 = "<gpx version=\"1.0\" creator=\"legacy\"><trk><trkseg>"
+                + "<trkpt lat=\"48\" lon=\"2\"><speed>3.5</speed>"
+                + "<course>180</course></trkpt></trkseg></trk></gpx>";
+        GpxParser.Result legacyV10Result = GpxParser.parse(legacyV10);
+        ok(legacyV10Result.pointCount() == 1
+                        && legacyV10Result.points.get(0).speedMps != null
+                        && Math.abs(legacyV10Result.points.get(0).speedMps - 3.5f) < 0.001f
+                        && legacyV10Result.points.get(0).courseDeg != null
+                        && Math.abs(legacyV10Result.points.get(0).courseDeg - 180.0f) < 0.001f,
+                "GPX 1.0 historique sans namespace : speed/course directs lus");
+
+        String directV11 = "<gpx version=\"1.1\" xmlns=\"http://www.topografix.com/GPX/1/1\" "
+                + "xmlns:gpstest=\"https://example.org/gpstest/ext\"><trk><trkseg>"
+                + "<trkpt lat=\"48\" lon=\"2\"><speed>8</speed><course>90</course>"
+                + "<hdop>1e-3</hdop><extensions><gpstest:speed>1e2</gpstest:speed>"
+                + "<gpstest:course>45</gpstest:course><gpstest:accuracy>.75</gpstest:accuracy>"
+                + "</extensions></trkpt></trkseg></trk></gpx>";
+        GpxParser.Result directV11Result = GpxParser.parse(directV11);
+        ok(directV11Result.pointCount() == 1
+                        && directV11Result.points.get(0).speedMps == null
+                        && directV11Result.points.get(0).courseDeg != null
+                        && Math.abs(directV11Result.points.get(0).courseDeg - 45.0f) < 0.001f
+                        && directV11Result.points.get(0).accuracyM != null
+                        && Math.abs(directV11Result.points.get(0).accuracyM - 0.75f) < 0.001f
+                        && directV11Result.points.get(0).hdop == null,
+                "GPX 1.1 : champs directs ignorés, extension GPS-Test validée strictement");
+
+        String exponentLexical = "<gpx version=\"1.1\" xmlns=\"http://www.topografix.com/GPX/1/1\"><trk><trkseg>"
+                + "<trkpt lat=\"1e-10\" lon=\"2\"/>"
+                + "<trkpt lat=\"48\" lon=\"2\"><ele>1e2</ele><hdop>NaN</hdop></trkpt>"
+                + "</trkseg></trk></gpx>";
+        GpxParser.Result exponentResult = GpxParser.parse(exponentLexical);
+        ok(exponentResult.pointCount() == 1 && exponentResult.invalidTrackPoints == 1,
+                "coordonnée avec exposant rejetée comme xsd:decimal invalide");
+        ok(Double.isNaN(exponentResult.points.get(0).ele)
+                        && exponentResult.points.get(0).hdop == null,
+                "exposant et NaN rejetés dans les décimaux GPX connus");
+
         // ============================================================
         section("5. Horodatage ISO 8601");
         // ============================================================

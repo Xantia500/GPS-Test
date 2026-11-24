@@ -206,6 +206,113 @@ public final class GpxPreservationTest {
 
 
 
+        // Les champs scalaires connus sont filtrés selon leur version et leur namespace.
+        // Les extensions tierces inconnues restent intactes même si leur texte ressemble
+        // à une valeur numérique invalide.
+        String scalarV10 = "<gpx version=\"1.0\" xmlns=\"http://www.topografix.com/GPX/1/0\" "
+                + "xmlns:v=\"https://vendor.example/ext\"><trk><trkseg>"
+                + "<trkpt lat=\"10\" lon=\"20\"><speed>1e2</speed><course>360</course>"
+                + "<magvar>-16.2</magvar><geoidheight>-16.2</geoidheight>"
+                + "<hdop>NaN</hdop><vdop>1.25</vdop><pdop>-1</pdop>"
+                + "<fix>3d</fix><sat>12</sat><dgpsid>1024</dgpsid>"
+                + "<extensions><v:speed>1e2</v:speed><v:keep>unchanged</v:keep></extensions>"
+                + "</trkpt></trkseg></trk></gpx>";
+        GpxPreservation.Document scalar10 = GpxPreservation.parse(new ByteArrayInputStream(
+                scalarV10.getBytes(StandardCharsets.UTF_8)), 100_000L);
+        String scalar10Children = scalar10.points.get(0).childrenXml;
+        check("GPX 1.0 : rejet de l'exposant, NaN, DOP négatif et DGPSID hors plage",
+                !scalar10Children.contains("<speed>") && !scalar10Children.contains("<hdop>")
+                        && !scalar10Children.contains("<pdop>") && !scalar10Children.contains("<dgpsid>"));
+        check("GPX 1.0 : valeurs valides, cap 360 et variation magnétique signée conservés",
+                scalar10Children.contains("<course xmlns=") && scalar10Children.contains("360</course>")
+                        && scalar10Children.contains("<magvar xmlns=") && scalar10Children.contains("-16.2</magvar>")
+                        && scalar10Children.contains("<geoidheight xmlns=") && scalar10Children.contains("-16.2</geoidheight>")
+                        && scalar10Children.contains("<vdop xmlns=") && scalar10Children.contains("1.25</vdop>")
+                        && scalar10Children.contains("<fix xmlns=") && scalar10Children.contains("3d</fix>")
+                        && scalar10Children.contains("<sat xmlns=") && scalar10Children.contains("12</sat>"));
+        check("GPX 1.0 : extension fournisseur préservée sans interprétation GPS-Test",
+                scalar10Children.contains("<v:speed>1e2</v:speed>")
+                        && scalar10Children.contains("<v:keep>unchanged</v:keep>"));
+
+        String scalarV10Legacy = "<gpx version=\"1.0\"><trk><trkseg>"
+                + "<trkpt lat=\"10\" lon=\"20\"><speed>1e2</speed>"
+                + "<course>360</course><magvar>-12.5</magvar><hdop>0.7</hdop>"
+                + "<extensions><v:speed xmlns:v=\"https://vendor.example/ext\">NaN</v:speed></extensions>"
+                + "</trkpt></trkseg></trk></gpx>";
+        GpxPreservation.Document scalar10Legacy = GpxPreservation.parse(new ByteArrayInputStream(
+                scalarV10Legacy.getBytes(StandardCharsets.UTF_8)), 100_000L);
+        String scalar10LegacyChildren = scalar10Legacy.points.get(0).childrenXml;
+        check("GPX 1.0 historique sans namespace : validation scalaire appliquée",
+                !scalar10LegacyChildren.contains("<speed xmlns=")
+                        && scalar10LegacyChildren.contains("360</course>")
+                        && scalar10LegacyChildren.contains("-12.5</magvar>")
+                        && scalar10LegacyChildren.contains("0.7</hdop>"));
+        check("GPX 1.0 historique : extension fournisseur non filtrée",
+                scalar10LegacyChildren.contains("<v:speed")
+                        && scalar10LegacyChildren.contains("NaN</v:speed>"));
+
+        String scalarV11 = "<gpx version=\"1.1\" xmlns=\"http://www.topografix.com/GPX/1/1\" "
+                + "xmlns:gpstest=\"https://example.org/gpstest/ext\" "
+                + "xmlns:v=\"https://vendor.example/ext\"><trk><trkseg>"
+                + "<trkpt lat=\"10\" lon=\"20\"><magvar>359.9</magvar>"
+                + "<geoidheight>-5.25</geoidheight><hdop>1e-10</hdop><vdop>.5</vdop>"
+                + "<pdop>2.</pdop><ageofdgpsdata>+0.5</ageofdgpsdata>"
+                + "<sat>-1</sat><dgpsid>1024</dgpsid><fix>pps</fix>"
+                + "<speed>1.2</speed><course>12</course>"
+                + "<extensions><gpstest:speed>1e2</gpstest:speed>"
+                + "<gpstest:course>360</gpstest:course><gpstest:accuracy>.25</gpstest:accuracy>"
+                + "<v:speed>1e2</v:speed><v:course>bad</v:course></extensions>"
+                + "</trkpt></trkseg></trk></gpx>";
+        GpxPreservation.Document scalar11 = GpxPreservation.parse(new ByteArrayInputStream(
+                scalarV11.getBytes(StandardCharsets.UTF_8)), 100_000L);
+        String scalar11Children = scalar11.points.get(0).childrenXml;
+        check("GPX 1.1 : champs core invalides et extensions GPS-Test invalides supprimés",
+                !scalar11Children.contains("<hdop>") && !scalar11Children.contains("<sat>")
+                        && !scalar11Children.contains("<dgpsid>")
+                        && !scalar11Children.contains("<speed xmlns=")
+                        && !scalar11Children.contains("<course xmlns=")
+                        && !scalar11Children.contains("gpstest:speed"));
+        check("GPX 1.1 : décimaux valides, fix pps et extension GPS-Test course/accuracy gardés",
+                scalar11Children.contains("<magvar xmlns=") && scalar11Children.contains("359.9</magvar>")
+                        && scalar11Children.contains("<geoidheight xmlns=") && scalar11Children.contains("-5.25</geoidheight>")
+                        && scalar11Children.contains("<vdop xmlns=") && scalar11Children.contains(".5</vdop>")
+                        && scalar11Children.contains("<pdop xmlns=") && scalar11Children.contains("2.</pdop>")
+                        && scalar11Children.contains("<ageofdgpsdata xmlns=") && scalar11Children.contains("+0.5</ageofdgpsdata>")
+                        && scalar11Children.contains("<fix xmlns=") && scalar11Children.contains("pps</fix>")
+                        && scalar11Children.contains("gpstest:course>360</gpstest:course>")
+                        && scalar11Children.contains("gpstest:accuracy>.25</gpstest:accuracy>"));
+        check("GPX 1.1 : extensions tierces non reconnues intactes, même avec une notation exponentielle",
+                scalar11Children.contains("<v:speed>1e2</v:speed>")
+                        && scalar11Children.contains("<v:course>bad</v:course>"));
+
+        String scalarV11Legacy = "<gpx version=\"1.1\"><trk><trkseg>"
+                + "<trkpt lat=\"10\" lon=\"20\"><speed>2.5</speed><course>90</course>"
+                + "<hdop>1e-3</hdop><vdop>0.8</vdop><extensions>"
+                + "<gpstest:speed xmlns:gpstest=\"https://example.org/gpstest/ext\">3.5</gpstest:speed>"
+                + "</extensions></trkpt></trkseg></trk></gpx>";
+        GpxPreservation.Document scalar11Legacy = GpxPreservation.parse(new ByteArrayInputStream(
+                scalarV11Legacy.getBytes(StandardCharsets.UTF_8)), 100_000L);
+        String scalar11LegacyChildren = scalar11Legacy.points.get(0).childrenXml;
+        check("GPX 1.1 historique sans namespace : speed/course directs écartés, valeurs invalides filtrées",
+                !scalar11LegacyChildren.contains("<speed xmlns=")
+                        && !scalar11LegacyChildren.contains("<course xmlns=")
+                        && !scalar11LegacyChildren.contains("<hdop xmlns="));
+        check("GPX 1.1 historique : extension GPS-Test valide conservée",
+                scalar11LegacyChildren.contains("gpstest:speed")
+                        && scalar11LegacyChildren.contains("3.5</gpstest:speed>"));
+
+        String tinyLatLon = GpxWriter.cleanedPointOpen(1.0e-10, -1.0e-10,
+                "1e-10", "-1e-10");
+        String tinyElevation = GpxWriter.cleanedPointCore(1.0e-10,
+                "1e-10", null, -1L);
+        check("repli coordonnée décimale sans notation exponentielle",
+                tinyLatLon.contains("lat=\"0.0000000001\"")
+                        && tinyLatLon.contains("lon=\"-0.0000000001\"")
+                        && !tinyLatLon.matches("(?s).*[-+]?\\d(?:\\.\\d+)?[Ee][-+]?\\d+.*"));
+        check("repli altitude décimale sans notation exponentielle",
+                tinyElevation.contains("<ele>0.0000000001</ele>")
+                        && !tinyElevation.matches("(?s).*[-+]?\\d(?:\\.\\d+)?[Ee][-+]?\\d+.*"));
+
         String externalEntity = "<?xml version=\"1.0\"?><!DOCTYPE gpx [<!ENTITY x SYSTEM \"file:///etc/passwd\">]>"
                 + "<gpx version=\"1.1\" xmlns=\"http://www.topografix.com/GPX/1/1\"><trk><trkseg>"
                 + "<trkpt lat=\"1\" lon=\"2\"><name>&x;</name></trkpt>"

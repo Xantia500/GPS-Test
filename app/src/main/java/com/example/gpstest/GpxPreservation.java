@@ -11,6 +11,8 @@ import org.xml.sax.helpers.DefaultHandler;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import javax.xml.parsers.SAXParserFactory;
 
 /**
@@ -38,6 +41,13 @@ public final class GpxPreservation {
     public static final int MAX_PRESERVED_XML_CHARS = 4 * 1024 * 1024;
     private static final int MAX_TRACKS = 20_000;
     private static final int MAX_ROOT_ELEMENTS = 50_000;
+    private static final String GPX_10_NAMESPACE = "http://www.topografix.com/GPX/1/0";
+    private static final String GPX_11_NAMESPACE = "http://www.topografix.com/GPX/1/1";
+    private static final String GPSTEST_NAMESPACE = "https://example.org/gpstest/ext";
+    /** xsd:decimal lexical space: unlike Double.parseDouble, no exponent or NaN/INF. */
+    private static final Pattern XSD_DECIMAL_PATTERN = Pattern.compile(
+            "[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)");
+    private static final Pattern XSD_INTEGER_PATTERN = Pattern.compile("[+-]?[0-9]+");
 
     public static final class Document {
         public String version;
@@ -201,6 +211,13 @@ public final class GpxPreservation {
         private Point currentPoint;
         private int elevationDepth = -1;
         private StringBuilder elevationValue;
+        // Validation ciblée des champs scalaires connus d'un point. Les éléments
+        // d'autres namespaces restent strictement préservés.
+        private int scalarDepth = -1;
+        private int scalarStartLength = -1;
+        private String scalarField;
+        private StringBuilder scalarValue;
+        private boolean scalarHasChild;
         private Fragment fragment;
         private final Map<String, String> namespaces = new LinkedHashMap<>();
         private final Map<String, String> pendingNamespaces = new LinkedHashMap<>();
@@ -311,6 +328,7 @@ public final class GpxPreservation {
                 currentTrack.hasName = true;
             }
 
+            int fragmentLengthBeforeElement = fragment != null ? fragment.xml.length() : -1;
             if (fragment == null) {
                 if (depth == 2 && !(gpxElement && "trk".equals(name))) {
                     if (gpxElement && "metadata".equals(name)) beginFragment(Fragment.ROOT_METADATA, qName, localName, uri, attributes);
@@ -329,6 +347,72 @@ public final class GpxPreservation {
                 appendStart(fragment.xml, qName, localName, uri, attributes, false);
                 pendingNamespaces.clear();
             }
+
+            if (scalarDepth > 0 && depth > scalarDepth) scalarHasChild = true;
+            String scalar = pointScalarField(name, uri, depth);
+            if (scalar != null && scalarField == null && fragment != null
+                    && fragment.type == Fragment.POINT_CHILDREN) {
+                scalarDepth = depth;
+                scalarStartLength = fragmentLengthBeforeElement >= 0
+                        ? fragmentLengthBeforeElement : 0;
+                scalarField = scalar;
+                scalarValue = new StringBuilder(24);
+                scalarHasChild = false;
+            }
+        }
+
+        /**
+         * Identifie uniquement les valeurs que l'application sait interpréter.
+         * Les champs GPX standards sont reconnus au niveau direct de trkpt ;
+         * les champs GPS-Test uniquement dans leur namespace privé et en GPX 1.1.
+         */
+        private String pointScalarField(String name, String uri, int atDepth) {
+            if (currentPoint == null || pointDepth <= 0) return null;
+            String rootNamespace = document.namespaceUri != null ? document.namespaceUri : "";
+            boolean version10 = GPX_10_NAMESPACE.equals(rootNamespace)
+                    || (rootNamespace.isEmpty() && "1.0".equals(document.version));
+            boolean version11 = GPX_11_NAMESPACE.equals(rootNamespace)
+                    || (rootNamespace.isEmpty() && "1.1".equals(document.version));
+
+            if (isGpxElement(uri) && atDepth == pointDepth + 1) {
+                if (version10) {
+                    switch (name) {
+                        case "speed": return "nonNegativeDecimal";
+                        case "course": return "course10";
+                        case "magvar": return "decimal"; // GPX 1.0 allows signed magnetic variation.
+                        case "geoidheight": return "decimal";
+                        case "hdop": case "vdop": case "pdop":
+                        case "ageofdgpsdata": return "nonNegativeDecimal";
+                        case "sat": return "nonNegativeInteger";
+                        case "dgpsid": return "dgpsId";
+                        case "fix": return "fix10";
+                        default: return null;
+                    }
+                }
+                if (version11) {
+                    switch (name) {
+                        // speed/course are not direct GPX 1.1 trkpt children.
+                        case "speed": case "course": return "invalidCoreField";
+                        case "magvar": return "degrees11";
+                        case "geoidheight": return "decimal";
+                        case "hdop": case "vdop": case "pdop":
+                        case "ageofdgpsdata": return "nonNegativeDecimal";
+                        case "sat": return "nonNegativeInteger";
+                        case "dgpsid": return "dgpsId";
+                        case "fix": return "fix11";
+                        default: return null;
+                    }
+                }
+            }
+
+            if (version11 && GPSTEST_NAMESPACE.equals(uri) && atDepth > pointDepth + 1) {
+                switch (name) {
+                    case "speed": case "accuracy": return "nonNegativeDecimal";
+                    case "course": return "course11Extension";
+                    default: return null;
+                }
+            }
+            return null;
         }
 
         private void beginFragment(int type, String qName, String localName, String uri,
@@ -346,6 +430,12 @@ public final class GpxPreservation {
                     throw new SAXException("Altitude GPX trop longue");
                 }
                 elevationValue.append(ch, start, length);
+            }
+            if (scalarValue != null && scalarDepth > 0 && depth >= scalarDepth) {
+                if (scalarValue.length() + length > GpxParser.MAX_SCALAR_CHARS) {
+                    throw new SAXException("Valeur GPX scalaire trop longue");
+                }
+                scalarValue.append(ch, start, length);
             }
             if (fragment == null) return;
             StringBuilder escaped = new StringBuilder(length + 16);
@@ -381,6 +471,16 @@ public final class GpxPreservation {
                 String closingName = qName != null && !qName.isEmpty()
                         ? qName : elementName(uri, localName, qName);
                 append(fragment.xml, "</" + closingName + ">");
+                if (depth == scalarDepth && scalarField != null) {
+                    if (scalarHasChild || !validKnownScalar(scalarField, scalarValue.toString())) {
+                        fragment.xml.setLength(Math.max(0, scalarStartLength));
+                    }
+                    scalarDepth = -1;
+                    scalarStartLength = -1;
+                    scalarField = null;
+                    scalarValue = null;
+                    scalarHasChild = false;
+                }
                 if (depth == fragment.depth) finishFragment();
             }
             if (isGpxElement(uri) && "trkpt".equals(name) && depth == pointDepth) {
@@ -409,6 +509,67 @@ public final class GpxPreservation {
                 implicitSegmentIndex = -1;
             }
             depth--;
+        }
+
+        private static boolean validKnownScalar(String field, String text) {
+            if ("invalidCoreField".equals(field)) return false;
+
+            if ("fix10".equals(field)) {
+                return "none".equals(text) || "2d".equals(text) || "3d".equals(text);
+            }
+            if ("fix11".equals(field)) {
+                return "none".equals(text) || "2d".equals(text) || "3d".equals(text)
+                        || "dgps".equals(text) || "pps".equals(text);
+            }
+            if ("nonNegativeInteger".equals(field) || "dgpsId".equals(field)) {
+                String candidate = trimXmlWhitespace(text);
+                if (!XSD_INTEGER_PATTERN.matcher(candidate).matches()) return false;
+                try {
+                    BigInteger value = new BigInteger(candidate);
+                    if (value.signum() < 0) return false;
+                    return !"dgpsId".equals(field)
+                            || value.compareTo(BigInteger.valueOf(1023L)) <= 0;
+                } catch (NumberFormatException invalid) {
+                    return false;
+                }
+            }
+
+            String candidate = trimXmlWhitespace(text);
+            if (!XSD_DECIMAL_PATTERN.matcher(candidate).matches()) return false;
+            final BigDecimal value;
+            try {
+                value = new BigDecimal(candidate);
+            } catch (NumberFormatException invalid) {
+                return false;
+            }
+            switch (field) {
+                case "decimal":
+                    return true;
+                case "nonNegativeDecimal":
+                    return value.signum() >= 0;
+                case "course10":
+                case "course11Extension":
+                    return value.signum() >= 0
+                            && value.compareTo(BigDecimal.valueOf(360L)) <= 0;
+                case "degrees11":
+                    return value.signum() >= 0
+                            && value.compareTo(BigDecimal.valueOf(360L)) < 0;
+                default:
+                    return false;
+            }
+        }
+
+        private static String trimXmlWhitespace(String text) {
+            if (text == null || text.isEmpty()) return "";
+            int start = 0;
+            int end = text.length();
+            while (start < end && isXmlWhitespace(text.charAt(start))) start++;
+            while (end > start && isXmlWhitespace(text.charAt(end - 1))) end--;
+            return text.substring(start, end);
+        }
+
+        private static boolean isXmlWhitespace(char c) {
+            return c == ' ' || c == '\t' || c == '\r' || c == '\n';
         }
 
         private void finishFragment() throws SAXException {
@@ -522,9 +683,13 @@ public final class GpxPreservation {
 
         private static boolean validCoords(String latText, String lonText) {
             if (latText == null || lonText == null) return false;
+            String latLexical = trimXmlWhitespace(latText);
+            String lonLexical = trimXmlWhitespace(lonText);
+            if (!XSD_DECIMAL_PATTERN.matcher(latLexical).matches()
+                    || !XSD_DECIMAL_PATTERN.matcher(lonLexical).matches()) return false;
             try {
-                double lat = Double.parseDouble(latText.trim());
-                double lon = Double.parseDouble(lonText.trim());
+                double lat = Double.parseDouble(latLexical);
+                double lon = Double.parseDouble(lonLexical);
                 return Double.isFinite(lat) && Double.isFinite(lon)
                         && Math.abs(lat) <= 90.0 && Math.abs(lon) <= 180.0
                         && !(lat == 0.0 && lon == 0.0);
