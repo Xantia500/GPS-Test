@@ -97,3 +97,24 @@ jobs:
             app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
           if-no-files-found: warn
           retention-days: 14
+
+
+  gpx-xsd:
+    name: GPX XSD validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download official Topografix GPX schemas
+        run: python3 tools/download_gpx_schemas.py
+
+      - name: Validate GPX 1.0 and 1.1 output against XSD
+        run: python3 tools/validate_gpx_xsd.py

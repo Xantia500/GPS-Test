@@ -8,3 +8,6 @@ Thumbs.db
 captures/
 *.jks
 *.keystore
+
+# Schémas GPX téléchargés à la demande pour le banc XSD (non versionnés).
+tools/xsd/

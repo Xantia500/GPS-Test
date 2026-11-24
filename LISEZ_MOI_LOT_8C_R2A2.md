@@ -44,3 +44,15 @@ Les deux documents de lot associés sont dans `docs/` :
 ## Important
 
 Cette livraison n'est pas fusionnée sur GitHub. `MainActivity.java`, `TrackingService.java`, `SessionJournal.java` et `SessionStore.java` n'ont pas été remplacés : leur logique R1 reste intacte. Le checkpoint `safeLengthBytes` réellement synchronisé et la récupération de sessions après crash ne sont pas encore implémentés.
+
+
+## Addendum — LOT 8C-R2A.3 (banc XSD)
+
+Le projet contient maintenant un banc de validation XSD GPX 1.0/1.1. Depuis la racine, lancer :
+
+```bash
+python3 tools/download_gpx_schemas.py
+python3 tools/validate_gpx_xsd.py
+```
+
+Le téléchargement utilise les deux URL canoniques Topografix et demande un accès HTTPS. GitHub Actions exécute ces étapes avant les suites JVM. Voir `docs/LOT_8C_R2A3_BANC_XSD_2026-11-24.md` pour les détails et les résultats de préparation.
