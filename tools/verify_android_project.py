@@ -231,6 +231,13 @@ require(bool(re.search(
 require("if (Build.VERSION.SDK_INT >= 34)" in tracking
         and "getGnssSignalTypes()" in tracking,
         "GnssCapabilities.getGnssSignalTypes API 34 doit être gardé")
+# Les méthodes de GnssAutomaticGainControl sont API 33. La lecture et surtout
+# l'exploitation de ces objets doivent toutes deux rester dans une garde API 33.
+require(bool(re.search(
+            r"if \(options\.signal && Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.TIRAMISU\) \{\s*"
+            r"for \(android\.location\.GnssAutomaticGainControl agcInfo : eventAgcs\)",
+            tracking)),
+        "Les getters GnssAutomaticGainControl doivent être protégés par API 33")
 require("if (Build.VERSION.SDK_INT >= 29)" in edge
         and "setStatusBarContrastEnforced" in edge,
         "Window contrast enforcement API 29 doit être gardé")

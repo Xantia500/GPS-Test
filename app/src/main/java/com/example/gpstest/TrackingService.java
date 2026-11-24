@@ -3547,20 +3547,28 @@ public class TrackingService extends Service {
                             rate, adr, measurementState));
                 }
 
-                if (options.signal) {
+                // GnssAutomaticGainControl et ses getters sont disponibles à partir
+                // d'Android 13 (API 33). La lecture de la liste est déjà protégée en
+                // amont ; protéger aussi son exploitation évite toute invocation de
+                // ces méthodes sur Android 7 à 12 (minSdk 24).
+                if (options.signal && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     for (android.location.GnssAutomaticGainControl agcInfo : eventAgcs) {
+                        final int constellationType = agcInfo.getConstellationType();
+                        final long carrierFrequencyHz = agcInfo.getCarrierFrequencyHz();
+                        final double levelDb = agcInfo.getLevelDb();
+                        final String constellation = Utils.constellationName(constellationType);
                         rows.add(RawMeasurementsFormatter.agcEventCsvLineFull(
                                 utcMillis, callbackElapsedNanos,
-                                Utils.constellationName(agcInfo.getConstellationType()),
-                                agcInfo.getCarrierFrequencyHz(), agcInfo.getLevelDb(),
+                                constellation,
+                                carrierFrequencyHz, levelDb,
                                 clockTime, fullBias, bias, leapSecond, discontinuity,
                                 fullTracking, isbReferenceConstellationType,
                                 isbReferenceCodeType, isbReferenceCarrierFrequencyHz,
                                 options.time));
                         preview.append(String.format(Locale.ROOT, "AGC %s %-6s %.1f dB\n",
-                                Utils.constellationName(agcInfo.getConstellationType()),
-                                RawMeasurementsFormatter.bandLabel(agcInfo.getCarrierFrequencyHz()),
-                                agcInfo.getLevelDb()));
+                                constellation,
+                                RawMeasurementsFormatter.bandLabel(carrierFrequencyHz),
+                                levelDb));
                     }
                 }
 
