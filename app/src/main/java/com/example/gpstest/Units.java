@@ -137,7 +137,11 @@ public final class Units {
      * « 3,4 km » est utile ; « 1 234,7 km » ne l'est pas.
      */
     public static String formatDistance(System sys, double meters) {
-        if (Double.isNaN(meters)) return "—";
+        // Une distance négative ou non finie n'est pas une mesure exploitable.
+        // Ne pas afficher une valeur incohérente (par exemple « -12 m » ou « ∞ km »).
+        if (!Double.isFinite(meters) || meters < 0.0) return "—";
+        // Normalise aussi -0.0 : une distance nulle doit rester « 0 m ».
+        if (meters == 0.0) meters = 0.0;
 
         // ── SOUS UNE UNITÉ, ON RESTE EN MÈTRES (corrigé v5.13) ─────────
         //

@@ -422,6 +422,18 @@ public class ModesAndPostProcessTest {
         ok(!Units.formatDistance(Units.System.METRIC, 5).startsWith("0"),
                 "5 m ne s'affiche plus comme zero : "
                         + Units.formatDistance(Units.System.METRIC, 5));
+        ok(Units.formatDistance(Units.System.METRIC, -12.5).equals("\u2014"),
+                "distance métrique négative rejetée");
+        ok(Units.formatDistance(Units.System.IMPERIAL, -1609.344).equals("\u2014"),
+                "distance impériale négative rejetée");
+        ok(Units.formatDistance(Units.System.NAUTICAL, -1852.0).equals("\u2014"),
+                "distance nautique négative rejetée");
+        ok(Units.formatDistance(Units.System.METRIC, Double.POSITIVE_INFINITY).equals("\u2014"),
+                "distance +infini rejetée");
+        ok(Units.formatDistance(Units.System.METRIC, Double.NEGATIVE_INFINITY).equals("\u2014"),
+                "distance -infini rejetée");
+        ok(Units.formatDistance(Units.System.METRIC, -0.0).equals("0 m"),
+                "zéro négatif normalisé en zéro positif");
 
         total();
     }
