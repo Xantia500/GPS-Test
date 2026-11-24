@@ -52,6 +52,9 @@ jobs:
       - name: Enforce offline map architecture
         run: python3 tools/verify_offline_map_architecture.py
 
+      - name: Verify asynchronous GPX open contract
+        run: python3 tools/verify_gpx_async_open.py
+
       - name: JVM regression tests
         run: bash tools/run_jvm_tests.sh
 

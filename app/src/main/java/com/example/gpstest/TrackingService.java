@@ -144,14 +144,14 @@ public class TrackingService extends Service {
     private BroadcastReceiver screenReceiver = null;
 
     // --- GPX ---
-    /** Writer du segment actuellement ouvert. Toutes les écritures après
-     *  l'entête sont sérialisées sur ioFile. */
-    private BufferedWriter gpxStream = null;
-    private File gpxFile = null;
+    /** Dernier fichier GPX connu (mis à jour après l'ouverture asynchrone). */
+    private volatile File gpxFile = null;
     private volatile RecordingSegment activeSegment = null;
+    /** Dernier segment fermé, utile si l'utilisateur arrête pendant une pause. */
+    private volatile RecordingSegment lastClosedSegment = null;
     /** Identité unique du suivi logique courant ; change à chaque nouveau START. */
     private volatile String sessionId = "";
-    private int nextSegmentId = 0;
+    private volatile int nextSegmentId = 0;
     private volatile int gpxPointsInSegment = 0;
 
     /**
@@ -169,21 +169,23 @@ public class TrackingService extends Service {
     private volatile long lastPeriodicGpxFlushElapsedMs = 0L;
     /** Une carte SD/fournisseur bloqué ne doit pas faire croître la file sans limite. */
     private static final int MAX_GPX_QUEUE_DEPTH = 120;
-    private GpxWriter.Version gpxVersion = GpxWriter.Version.V11;
 
     /** Contexte immuable d'un segment : toutes les tâches différées capturent
      *  cet objet, jamais des champs globaux susceptibles d'appartenir au
      *  segment suivant. L'URI SAF lui appartient jusqu'à la publication finale. */
     private static final class RecordingSegment {
         final int id;
-        final File file;
-        final File snapshotFile;
+        volatile File file;
+        volatile File snapshotFile;
         final android.net.Uri destinationTree;
         final boolean publishEnabled;
         final GpxWriter.Version version;
         final int counterEpoch;
-        final FileOutputStream output;
-        final BufferedWriter writer;
+        /** Toutes les opérations sur le flux, y compris le repli, utilisent ce verrou. */
+        final Object ioLock = new Object();
+        final GpxSegmentIoState ioState = new GpxSegmentIoState();
+        volatile FileOutputStream output;
+        volatile BufferedWriter writer;
         volatile android.net.Uri document;
         volatile long lastFlushElapsedMs;
         volatile long lastSyncElapsedMs;
@@ -191,21 +193,18 @@ public class TrackingService extends Service {
         int pointsQueued;
         int pointsFailedAfterQueue;
         volatile int pointsWritten;
+        volatile boolean acceptingPoints = true;
         volatile boolean closed;
         volatile boolean writeFailed;
+        volatile boolean openFailed;
 
-        RecordingSegment(int id, File file, android.net.Uri tree,
-                         GpxWriter.Version version, int counterEpoch,
-                         FileOutputStream output, BufferedWriter writer, long nowElapsed) {
+        RecordingSegment(int id, android.net.Uri tree, GpxWriter.Version version,
+                         int counterEpoch, long nowElapsed) {
             this.id = id;
-            this.file = file;
-            this.snapshotFile = new File(file.getParentFile(), file.getName() + ".publish.tmp");
             this.destinationTree = tree;
             this.publishEnabled = tree != null;
             this.version = version;
             this.counterEpoch = counterEpoch;
-            this.output = output;
-            this.writer = writer;
             this.lastFlushElapsedMs = nowElapsed;
             this.lastSyncElapsedMs = nowElapsed;
         }
@@ -844,14 +843,15 @@ public class TrackingService extends Service {
         unsubscribeSensors();
 
         boolean wasRecording = state.isRecording();
-        if (wasRecording) closeRecordingSegment();
+        RecordingSegment segmentToProcess = wasRecording
+                ? closeRecordingSegment() : lastClosedSegment;
         state.setRecording(false);
         state.setSuspended(false);
         // Ne PAS effacer le journal comme pour un arrêt volontaire : au
         // prochain démarrage, SessionJournal signalera cette interruption.
         persistSession();
         state.notifyChanged();
-        if (wasRecording) runPostProcess();
+        if (wasRecording) runPostProcess(segmentToProcess);
 
         stopForegroundCompat(true);
         stopSelfSafely();
@@ -1200,8 +1200,8 @@ public class TrackingService extends Service {
         // segment fermé dans cette même instance Service. Le post-traitement
         // éventuel a déjà capturé son File dans une variable locale.
         if (activeSegment == null) {
-            gpxStream = null;
             gpxFile = null;
+            lastClosedSegment = null;
             gpxPointsInSegment = 0;
         }
 
@@ -1540,8 +1540,9 @@ public class TrackingService extends Service {
             fixTracker.forceLoss();
             lossPolicy.reset();
             state.setSuspended(false);
-            if (state.isRecording() && gpxStream == null) {
-                openRecordingSegment(state.getTrackCounterEpoch());
+            if (state.isRecording() && activeSegment == null
+                    && !openRecordingSegment(state.getTrackCounterEpoch())) {
+                state.setRecording(false);
             }
         }
         subscribeSensors();
@@ -1632,6 +1633,15 @@ public class TrackingService extends Service {
      * savoir qu'un enregistrement a été interrompu.
      */
     private void persistSession() {
+        persistSessionTo(ioMeta);
+    }
+
+    /**
+     * Variante ciblant explicitement le worker de métadonnées capturé lors
+     * d'un arrêt. Elle permet au dernier jalon GPX de poster le snapshot final
+     * après la fin des E/S fichier, puis de placer quitSafely() derrière lui.
+     */
+    private void persistSessionTo(final Handler meta) {
         // Snapshot immuable capturé avant l'accès disque. L'identité de session
         // permet d'écarter une écriture retardée appartenant à un ancien START.
         final String snapshotSessionId = sessionId;
@@ -1659,7 +1669,6 @@ public class TrackingService extends Service {
         // Le journal est écrit en interne via AtomicFile. Il reste dans une file
         // séparée des points GPX : il ne peut pas retarder l'acquisition. Avant
         // l'écriture, on vérifie que le START n'a pas changé entre-temps.
-        Handler meta = ioMeta;
         if (meta == null || !meta.post(() -> {
             if (!snapshotSessionId.equals(sessionId)) return;
             if (!SessionStore.write(TrackingService.this, journal)) {
@@ -1691,7 +1700,8 @@ public class TrackingService extends Service {
         // « tout » n'avait pas le même résultat que celui qui arrêtait
         // « l'enregistrement », pour la même trace.
         final boolean wasRecording = state.isRecording();
-        if (wasRecording) closeRecordingSegment();
+        final RecordingSegment segmentToProcess = wasRecording
+                ? closeRecordingSegment() : lastClosedSegment;
         state.setRecording(false);
         state.setSuspended(false);
         state.setGpxSegment(0);
@@ -1713,7 +1723,7 @@ public class TrackingService extends Service {
         // onDestroy ne bloque jamais le thread principal. Le compteur de tâches
         // en vol retarde uniquement l'arrêt gracieux des workers tant que le
         // processus vit ; Android peut toujours tuer le processus sans callback.
-        if (wasRecording) runPostProcess();
+        if (wasRecording) runPostProcess(segmentToProcess);
     }
 
     // ==================================================================
@@ -1721,7 +1731,7 @@ public class TrackingService extends Service {
     // ==================================================================
 
     private void startRecording() {
-        if (gpxStream != null) return;
+        if (activeSegment != null || state.isRecording()) return;
         if (!running) {
             state.setGpxError("Démarrez d'abord le GPS");
             state.notifyChanged();
@@ -1735,26 +1745,19 @@ public class TrackingService extends Service {
             state.notifyChanged();
             return;
         }
-        // Reset synchrone + epoch : les tâches retardées d'une ancienne
-        // trace ne peuvent plus polluer les compteurs de cette nouvelle trace.
-        // Aucun aller-retour worker n'est nécessaire avant le premier fix.
         synchronized (gnssProcessingLock) {
-            if (gpxStream != null || !running) return;
-            // Le passage à recording=true et l'ouverture du segment sont
-            // atomiques vis-à-vis des callbacks de position : aucun fix ne
-            // peut être traité avant que son writer soit prêt.
+            if (activeSegment != null || state.isRecording() || !running) return;
             final int counterEpoch = state.resetTrackCountersAndGetEpoch();
             state.setRecording(true);
             state.setGpxSegment(0);
             state.setGpxError(null);
             state.setSessionNotice(null);
-            // Le résultat du nettoyage précédent appartient à la trace d'AVANT.
-            // Le garder afficherait « 300 → 21 points » pendant toute la nouvelle
-            // session, masquant le compteur de points en direct.
+            state.setLastGpxFile(null);
             state.setCleanResult(null);
-            openRecordingSegment(counterEpoch);
-            if (gpxStream == null) {
-                // L'ouverture a échoué : openRecordingSegment a déjà posé l'erreur.
+            gpxFile = null;
+            lastClosedSegment = null;
+            gpxPointsInSegment = 0;
+            if (!openRecordingSegment(counterEpoch)) {
                 state.setRecording(false);
             }
         }
@@ -1764,20 +1767,21 @@ public class TrackingService extends Service {
     }
 
     /**
-     * Ouvre un segment de trace : un fichier GPX complet (entête + points à
-     * venir + pied), dans la politique GPX choisie.
+     * Réserve immédiatement le contexte du segment, puis place son ouverture
+     * et son en-tête en tête de la FIFO ioFile. Aucun accès fichier n'est fait
+     * ici : les fixes peuvent continuer à être acceptés et seront mis en file
+     * derrière cette barrière.
      */
-    private void openRecordingSegment(int counterEpoch) {
-        File dir = getExternalFilesDir(null);
-        if (dir == null) {
-            state.setGpxError("Stockage indisponible");
-            state.setRecording(false);
-            return;
+    private boolean openRecordingSegment(int counterEpoch) {
+        Handler writerHandler = ioFile;
+        if (writerHandler == null) {
+            state.setGpxError("File d'écriture indisponible : ouverture GPX impossible");
+            return false;
         }
-        long nowWallMs = System.currentTimeMillis(); // nom et métadonnée GPX : heure civile
-        long nowElapsedMs = android.os.SystemClock.elapsedRealtime(); // durées uniquement
+
+        long nowWallMs = System.currentTimeMillis();
+        long nowElapsedMs = android.os.SystemClock.elapsedRealtime();
         GpxWriter.Version ver = Prefs.readGpxVersion(this);
-        gpxVersion = ver;
         String suffix = BackgroundPolicy.segmentSuffix(policy, state.getGpxSegment());
         String base = GpxWriter.fileName(nowWallMs, ver);
         if (suffix != null) {
@@ -1785,7 +1789,7 @@ public class TrackingService extends Service {
                     ? base.substring(0, base.length() - 4) + suffix + ".gpx"
                     : base + suffix;
         }
-        File file = uniqueFile(new File(dir, base));
+        final String baseName = base;
         android.net.Uri tree = Destination.isExternalActive(this)
                 ? Destination.treeUri(this) : null;
 
@@ -1793,63 +1797,137 @@ public class TrackingService extends Service {
         state.setDestLabel(tree != null ? Prefs.readDestLabel(this) : null);
         state.setPublishStatus(tree != null ? "wait" : null);
         state.setPublishedName(null);
+        state.setGpxDurabilityWarning(null);
 
+        final RecordingSegment segment = new RecordingSegment(++nextSegmentId,
+                tree, ver, counterEpoch, nowElapsedMs);
+        activeSegment = segment;
+
+        // IMPORTANT : cette post est exécutée alors que l'appelant détient
+        // gnssProcessingLock. Les callbacks GNSS qui ajoutent des points
+        // prennent le même verrou : leur post ne peut donc jamais précéder
+        // l'ouverture/en-tête de ce segment.
+        boolean accepted = writerHandler.post(() -> openRecordingSegmentOnIo(
+                segment, baseName, nowWallMs));
+        if (!accepted) {
+            activeSegment = null;
+            segment.acceptingPoints = false;
+            segment.openFailed = true;
+            segment.ioState.failOpen();
+            state.setGpxError("File d'écriture indisponible : ouverture GPX non mise en file");
+            return false;
+        }
+        return true;
+    }
+
+    /** Effectue toutes les E/S d'ouverture sur ioFile, jamais sur le thread principal. */
+    private void openRecordingSegmentOnIo(RecordingSegment segment, String base,
+                                          long nowWallMs) {
         FileOutputStream output = null;
         BufferedWriter writer = null;
+        File file = null;
         try {
-            output = new FileOutputStream(file, false);
-            writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), 8192);
-            writer.write(GpxWriter.header(ver, "GPS Test — trace", nowWallMs));
-            writer.flush();
-            // Pas de fsync sur le thread principal : l'entête est remis au FD
-            // immédiatement, puis la première synchronisation durable est
-            // effectuée dans le worker (30 s ou fermeture du segment).
+            synchronized (segment.ioLock) {
+                if (!segment.ioState.isOpening()) return;
+                File dir = getExternalFilesDir(null);
+                if (dir == null) throw new java.io.IOException("Stockage indisponible");
+                if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) {
+                    throw new java.io.IOException("Impossible de créer le dossier GPX");
+                }
+                file = uniqueFile(new File(dir, base));
+                // uniqueFile() réserve le nom avec createNewFile() (création
+                // exclusive). append=true évite qu'une éventuelle ouverture
+                // concurrente ne soit détruite par une troncature implicite.
+                output = new FileOutputStream(file, true);
+                writer = new BufferedWriter(
+                        new OutputStreamWriter(output, StandardCharsets.UTF_8), 8192);
+                writer.write(GpxWriter.header(segment.version, "GPS Test — trace", nowWallMs));
+                writer.flush();
 
-            RecordingSegment segment = new RecordingSegment(++nextSegmentId, file, tree,
-                    ver, counterEpoch, output, writer, nowElapsedMs);
-            activeSegment = segment;
-            gpxFile = file;
-            gpxStream = writer;
-            gpxPointsInSegment = 0;
-            state.setGpxError(null);
-            state.setLastGpxFile(file.getName());
-            // La copie SAF est publiée à la fermeture du segment. Réécrire
-            // le fichier complet toutes les 30 s ferait un coût quadratique
-            // (O(n²)) sur une randonnée longue et userait inutilement le
-            // stockage. Le GPX local reste append-only et récupérable après
-            // la mort du processus ; le dossier choisi reçoit la version
-            // complète et fermée à l'arrêt/pause de ce segment.
+                segment.file = file;
+                segment.snapshotFile = new File(file.getParentFile(),
+                        file.getName() + ".publish.tmp");
+                segment.output = output;
+                segment.writer = writer;
+                if (!segment.ioState.markReady()) {
+                    throw new java.io.IOException("État d'ouverture GPX inattendu");
+                }
+                segment.lastFlushElapsedMs = android.os.SystemClock.elapsedRealtime();
+                segment.lastSyncElapsedMs = segment.lastFlushElapsedMs;
+            }
+
+            final File openedFile = file;
+            if (isLatestCounterSegment(segment)) gpxFile = openedFile;
+            ui.post(() -> {
+                if (!isLatestCounterSegment(segment)) return;
+                gpxFile = openedFile;
+                state.setLastGpxFile(openedFile.getName());
+                state.setGpxError(null);
+                state.notifyChanged();
+                if (!stopRequested && !serviceDestroying) persistSession();
+                updateNotification();
+            });
         } catch (Exception e) {
-            try { if (writer != null) writer.close(); else if (output != null) output.close(); }
-            catch (Exception ignored) { }
-            activeSegment = null;
-            gpxStream = null;
-            gpxFile = null;
-            state.setRecording(false);
-            state.setGpxError("Échec d'ouverture : " + e.getMessage());
+            synchronized (segment.ioLock) {
+                try { if (writer != null) writer.close(); else if (output != null) output.close(); }
+                catch (Exception ignored) { }
+                segment.file = file;
+                segment.snapshotFile = file != null
+                        ? new File(file.getParentFile(), file.getName() + ".publish.tmp") : null;
+                segment.output = null;
+                segment.writer = null;
+                segment.openFailed = true;
+                segment.writeFailed = true;
+                segment.ioState.failOpen();
+            }
+            final File failedFile = file;
+            if (failedFile != null && isLatestCounterSegment(segment)) gpxFile = failedFile;
+            final String message = "Échec d'ouverture GPX : " + e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? " — " + e.getMessage() : "");
+            ui.post(() -> {
+                if (!isLatestCounterSegment(segment)) return;
+                if (failedFile != null) {
+                    gpxFile = failedFile;
+                    state.setLastGpxFile(failedFile.getName());
+                }
+                if (activeSegment == segment) {
+                    activeSegment = null;
+                    segment.acceptingPoints = false;
+                    state.setRecording(false);
+                }
+                state.setGpxError(message);
+                state.notifyChanged();
+                if (!stopRequested && !serviceDestroying) persistSession();
+                updateNotification();
+            });
         }
     }
 
     /**
-     * Renvoie un fichier qui n'existe pas encore.
+     * Réserve atomiquement un nouveau fichier qui n'existe pas encore.
      *
      * Si « trace-….gpx » existe déjà, on essaie « trace-…-2.gpx », « -3 »…
-     * On ne supprime ni n'écrase JAMAIS une trace existante : c'est le seul
-     * comportement acceptable pour un outil qui enregistre des données de
-     * terrain que l'utilisateur ne peut pas reconstituer.
+     * createNewFile() combine vérification et création : un simple exists()
+     * suivi d'un FileOutputStream aurait une fenêtre de course et pourrait
+     * tronquer une trace créée entre-temps. Après 999 collisions, on échoue
+     * explicitement ; on ne retourne jamais le nom initial déjà existant.
      */
-    private static File uniqueFile(File wanted) {
-        if (!wanted.exists()) return wanted;
+    private static File uniqueFile(File wanted) throws java.io.IOException {
+        // createNewFile() réalise la vérification et la réservation en une
+        // seule opération atomique. Un simple exists() suivi d'un
+        // FileOutputStream(..., false) pouvait écraser un fichier créé entre
+        // les deux appels, ou même le nom initial après 999 collisions.
+        if (wanted.createNewFile()) return wanted;
 
         String name = wanted.getName();
         String stem = name.endsWith(".gpx") ? name.substring(0, name.length() - 4) : name;
         File dir = wanted.getParentFile();
         for (int i = 2; i < 1000; i++) {
             File candidate = new File(dir, stem + "-" + i + ".gpx");
-            if (!candidate.exists()) return candidate;
+            if (candidate.createNewFile()) return candidate;
         }
-        return wanted;   // 1000 collisions : on laisse échouer l'écriture proprement
-        }
+        throw new java.io.IOException("Trop de fichiers GPX portant le même nom");
+    }
 
     /**
      * Écrit un point sans rétention de la trace en mémoire. Les points sont
@@ -1861,10 +1939,12 @@ public class TrackingService extends Service {
     private void appendPoint(final GpxWriter.TrackPoint p) {
         final RecordingSegment segment = activeSegment;
         if (segment == null) return; // pas d'enregistrement actif
-        if (segment.closed || segment.writer == null) {
+        if (segment.closed || !segment.acceptingPoints || segment.openFailed) {
             state.incrementPointsAccepted(segment.counterEpoch);
             state.incrementPointsFailedBeforeQueue(segment.counterEpoch);
-            state.setGpxError("Point accepté mais segment GPX déjà fermé ou indisponible");
+            state.setGpxError(segment.openFailed
+                    ? "Ouverture GPX échouée : point accepté mais non enregistré"
+                    : "Point accepté mais segment GPX déjà fermé ou indisponible");
             state.notifyChanged();
             return;
         }
@@ -1898,9 +1978,12 @@ public class TrackingService extends Service {
                 String errorMessage = null;
                 boolean written = false;
                 try {
-                    synchronized (segment.writer) {
-                        if (segment.closed || segment.writeFailed) {
-                            throw new java.io.IOException("segment fermé ou écriture en erreur");
+                    synchronized (segment.ioLock) {
+                        if (segment.closed || segment.writeFailed || segment.openFailed
+                                || !segment.ioState.canWrite() || segment.writer == null) {
+                            throw new java.io.IOException(segment.openFailed
+                                    ? "ouverture GPX échouée"
+                                    : "segment fermé ou écriture en erreur");
                         }
                         segment.writer.write(GpxWriter.pointXml(p, segment.version));
                         long now = android.os.SystemClock.elapsedRealtime();
@@ -1931,8 +2014,10 @@ public class TrackingService extends Service {
                 } catch (Exception e) {
                     segment.writeFailed = true;
                     written = false;
-                    errorMessage = "Écriture GPX : " + e.getClass().getSimpleName()
-                            + (e.getMessage() != null ? " — " + e.getMessage() : "");
+                    if (!segment.openFailed) {
+                        errorMessage = "Écriture GPX : " + e.getClass().getSimpleName()
+                                + (e.getMessage() != null ? " — " + e.getMessage() : "");
+                    }
                 }
 
                 synchronized (segment) {
@@ -2001,13 +2086,12 @@ public class TrackingService extends Service {
         Handler writerHandler = ioFile;
         if (writerHandler == null || !writerHandler.post(() -> {
             try {
-                synchronized (segment.writer) {
-                    if (!segment.closed) {
+                synchronized (segment.ioLock) {
+                    if (!segment.closed && !segment.openFailed
+                            && segment.ioState.canWrite() && segment.writer != null) {
                         segment.writer.flush();
                         long now = android.os.SystemClock.elapsedRealtime();
                         segment.lastFlushElapsedMs = now;
-                        // Un flush demandé sur un jalon important est aussi un
-                        // point de durabilité raisonnable, sans le faire à 1 Hz.
                         if (now - segment.lastSyncElapsedMs >= SYNC_EVERY_MS) {
                             try {
                                 segment.output.getFD().sync();
@@ -2150,28 +2234,47 @@ public class TrackingService extends Service {
         }
     }
 
-    /** Ferme le segment courant : FIFO après tous les points déjà acceptés. */
-    private void closeRecordingSegment() {
-        final RecordingSegment segment = activeSegment;
-        if (segment == null) return;
-        activeSegment = null;
-        gpxStream = null;
-        gpxFile = segment.file;
+    /**
+     * Ferme le segment courant : la demande est mise après l'ouverture et tous
+     * les points déjà acceptés dans la même FIFO. La méthode est réentrante
+     * avec gnssProcessingLock pour sérialiser l'acceptation et la fermeture.
+     */
+    private RecordingSegment closeRecordingSegment() {
+        synchronized (gnssProcessingLock) {
+            final RecordingSegment segment = activeSegment;
+            if (segment == null) return null;
+            activeSegment = null;
+            segment.acceptingPoints = false;
+            lastClosedSegment = segment;
+            if (segment.file != null) {
+                gpxFile = segment.file;
+                state.setLastGpxFile(segment.file.getName());
+            }
+            state.setGpxSegment(state.getGpxSegment() + 1);
 
-        state.setLastGpxFile(segment.file.getName());
-        state.setGpxSegment(state.getGpxSegment() + 1);
-
-        if (ioFile == null) {
-            state.setGpxError("File d'écriture indisponible à la fermeture");
-            closeSegmentFallback(segment);
-            return;
+            Handler writerHandler = ioFile;
+            if (writerHandler == null) {
+                state.setGpxError("File d'écriture indisponible à la fermeture");
+                closeSegmentFallback(segment);
+                return segment;
+            }
+            boolean accepted = writerHandler.post(() -> closeSegmentOnIo(segment));
+            if (!accepted) {
+                state.setGpxError("File d'écriture indisponible à la fermeture");
+                closeSegmentFallback(segment);
+            }
+            return segment;
         }
-        boolean accepted = ioFile.post(() -> {
-            boolean closedCleanly = !segment.writeFailed;
-            try {
-                synchronized (segment.writer) {
-                    if (!segment.closed) {
-                        if (!segment.writeFailed) segment.writer.write(GpxWriter.footer());
+    }
+
+    private void closeSegmentOnIo(final RecordingSegment segment) {
+        boolean closedCleanly = false;
+        try {
+            synchronized (segment.ioLock) {
+                if (!segment.closed) {
+                    if (segment.ioState.canWrite() && segment.writer != null
+                            && !segment.writeFailed) {
+                        segment.writer.write(GpxWriter.footer());
                         segment.writer.flush();
                         try {
                             segment.output.getFD().sync();
@@ -2181,93 +2284,61 @@ public class TrackingService extends Service {
                                     + syncError.getClass().getSimpleName());
                         }
                         segment.writer.close();
+                        closedCleanly = true;
+                    } else {
+                        // Ouverture échouée : conserver le fichier partiel
+                        // éventuel, sans fabriquer un pied trompeur.
+                        if (segment.writer != null) segment.writer.close();
+                        else if (segment.output != null) segment.output.close();
                     }
                     segment.closed = true;
-                }
-            } catch (Exception e) {
-                closedCleanly = false;
-                segment.writeFailed = true;
-                segment.closed = true;
-                final String message = "Fermeture GPX : " + e.getClass().getSimpleName()
-                        + (e.getMessage() != null ? " — " + e.getMessage() : "");
-                reportSegmentGpxError(segment, message);
-                try { segment.output.close(); } catch (Exception ignored) { }
-            }
-            if (segment.publishEnabled) {
-                if (!closedCleanly || segment.writeFailed) {
-                    ui.post(() -> {
-                        if (isLatestCounterSegment(segment)) {
-                            state.setPublishStatus("err:trace locale incomplète — copie externe non publiée");
-                            state.notifyChanged();
-                        }
-                    });
-                } else {
-                    long length = segment.file.length();
-                    Handler publisher = ioPublish;
-                    if (publisher == null || !publisher.post(() -> publishSnapshot(segment, length))) {
-                        ui.post(() -> {
-                            if (isLatestCounterSegment(segment)) {
-                                state.setPublishStatus("err:file de publication indisponible");
-                                state.notifyChanged();
-                            }
-                        });
-                    }
+                    segment.ioState.finishClose();
                 }
             }
-            ui.post(() -> { state.notifyChanged(); updateNotification(); });
-        });
-        if (!accepted) {
-            state.setGpxError("File d'écriture indisponible à la fermeture");
-            closeSegmentFallback(segment);
+        } catch (Exception e) {
+            segment.writeFailed = true;
+            segment.closed = true;
+            segment.ioState.finishClose();
+            reportSegmentGpxError(segment, "Fermeture GPX : " + e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? " — " + e.getMessage() : ""));
+            try { if (segment.output != null) segment.output.close(); } catch (Exception ignored) { }
         }
+        if (segment.publishEnabled) {
+            if (!closedCleanly || segment.writeFailed || segment.openFailed || segment.file == null) {
+                ui.post(() -> {
+                    if (isLatestCounterSegment(segment)) {
+                        state.setPublishStatus("err:trace locale incomplète — copie externe non publiée");
+                        state.notifyChanged();
+                    }
+                });
+            } else {
+                long length = segment.file.length();
+                Handler publisher = ioPublish;
+                if (publisher == null || !publisher.post(() -> publishSnapshot(segment, length))) {
+                    // onDestroy() retire les références aux workers avant que
+                    // la FIFO fichier soit forcément vide. Si le worker SAF
+                    // n'accepte plus la tâche, préserver le comportement de
+                    // secours : publier sur un thread dédié, jamais sur ioFile.
+                    Thread fallback = new Thread(() -> publishSnapshot(segment, length),
+                            "gpx-publish-fallback");
+                    fallback.setDaemon(true);
+                    fallback.start();
+                }
+            }
+        }
+        ui.post(() -> {
+            if (isLatestCounterSegment(segment) && segment.file != null) {
+                gpxFile = segment.file;
+                state.setLastGpxFile(segment.file.getName());
+            }
+            state.notifyChanged();
+            updateNotification();
+        });
     }
 
     /** Dernier recours si le HandlerThread a déjà été arrêté. */
     private void closeSegmentFallback(final RecordingSegment segment) {
-        Thread t = new Thread(() -> {
-            boolean closedCleanly = !segment.writeFailed;
-            try {
-                synchronized (segment.writer) {
-                    if (!segment.closed) {
-                        if (!segment.writeFailed) segment.writer.write(GpxWriter.footer());
-                        segment.writer.flush();
-                        try {
-                            segment.output.getFD().sync();
-                            reportSegmentDurability(segment, null);
-                        } catch (Exception syncError) {
-                            reportSegmentDurability(segment, "Synchronisation finale GPX non confirmée : "
-                                    + syncError.getClass().getSimpleName());
-                        }
-                        segment.writer.close();
-                    }
-                    segment.closed = true;
-                }
-            } catch (Exception closeError) {
-                closedCleanly = false;
-                segment.writeFailed = true;
-                reportSegmentGpxError(segment, "Fermeture GPX : "
-                        + closeError.getClass().getSimpleName());
-                try { segment.output.close(); } catch (Exception ignoredAgain) { }
-            }
-            if (segment.publishEnabled) {
-                if (!closedCleanly || segment.writeFailed) {
-                    ui.post(() -> {
-                        if (isLatestCounterSegment(segment)) {
-                            state.setPublishStatus("err:trace locale incomplète — copie externe non publiée");
-                            state.notifyChanged();
-                        }
-                    });
-                } else {
-                    long length = segment.file.length();
-                    Handler publisher = ioPublish;
-                    if (publisher == null || !publisher.post(() -> publishSnapshot(segment, length))) {
-                        // Le HandlerThread peut être déjà arrêté ; publication
-                        // de dernier recours, toujours hors du thread principal.
-                        publishSnapshot(segment, length);
-                    }
-                }
-            }
-        }, "gpx-close-fallback");
+        Thread t = new Thread(() -> closeSegmentOnIo(segment), "gpx-close-fallback");
         t.setDaemon(true);
         t.start();
     }
@@ -2288,6 +2359,13 @@ public class TrackingService extends Service {
         // éventuellement mises en file. Chaque échec de post a un repli :
         // aucun HandlerThread ne doit rester vivant par oubli.
         Runnable closeFileThenPublisher = () -> {
+            // Tous les segments (y compris une ouverture qui était encore en
+            // attente lors de onDestroy) sont maintenant passés dans la FIFO.
+            // Publier le dernier nom de fichier dans le journal AVANT d'arrêter
+            // ioMeta : sinon le snapshot de onDestroy pourrait ne contenir
+            // aucun nom alors que l'en-tête GPX vient juste d'être créé.
+            if (!stopRequested) persistSessionTo(metaHandler);
+            postQuitSafely(metaHandler, metaThread);
             quitThreadSafely(fileThread);
             postQuitSafely(publishHandler, publishThread);
         };
@@ -2298,14 +2376,19 @@ public class TrackingService extends Service {
                 catch (RuntimeException ignored) { queued = false; }
             }
             if (!queued) {
+                // File worker indisponible : aucun futur état de fichier ne
+                // pourra être observé. Le dernier snapshot connu est néanmoins
+                // placé avant l'arrêt du worker méta.
+                if (!stopRequested) persistSessionTo(metaHandler);
+                postQuitSafely(metaHandler, metaThread);
                 quitThreadSafely(fileThread);
                 postQuitSafely(publishHandler, publishThread);
             }
         } else {
+            if (!stopRequested) persistSessionTo(metaHandler);
+            postQuitSafely(metaHandler, metaThread);
             postQuitSafely(publishHandler, publishThread);
         }
-
-        postQuitSafely(metaHandler, metaThread);
 
         // Les références sont retirées tout de suite afin qu'aucune nouvelle
         // opération ne puisse croire que les workers sont encore disponibles.
@@ -2336,12 +2419,14 @@ public class TrackingService extends Service {
 
     /** Arrêt demandé par l'utilisateur : ferme le fichier et sort de l'enregistrement. */
     private void stopRecording() {
+        final RecordingSegment segmentToProcess;
         synchronized (gnssProcessingLock) {
             if (!state.isRecording()) {
                 state.notifyChanged();
                 return;
             }
-            closeRecordingSegment();
+            RecordingSegment closed = closeRecordingSegment();
+            segmentToProcess = closed != null ? closed : lastClosedSegment;
             state.setRecording(false);
             // Un message de rejet de point n'a plus de sens une fois
             // l'enregistrement arrêté : le point suivant ne sera pas écrit,
@@ -2359,27 +2444,35 @@ public class TrackingService extends Service {
         // Le fichier d'origine n'est JAMAIS modifié — le nettoyage écrit
         // une copie `_nettoye.GPX` à côté. Si quoi que ce soit échoue,
         // l'utilisateur garde sa trace brute et on le lui dit.
-        runPostProcess();
+        runPostProcess(segmentToProcess);
     }
 
-    private void runPostProcess() {
-        if (!Prefs.readPostProcess(this)) return;
+    private void runPostProcess(final RecordingSegment segment) {
+        if (!Prefs.readPostProcess(this) || segment == null) return;
 
-        // Capturer les ressources AVANT toute tâche différée : un nouvel
-        // enregistrement ne doit jamais remplacer le fichier/segment traité.
-        final File src = gpxFile;
+        // La fermeture (ou l'ouverture suivie de la fermeture si l'utilisateur
+        // a arrêté immédiatement) est déjà placée dans ioFile. Cette barrière
+        // l'attend avant de lire le fichier, sans bloquer le thread principal.
         final Handler fileHandler = ioFile;
         final Handler metaHandler = ioMeta;
-        if (src == null || !src.exists() || fileHandler == null || metaHandler == null) return;
+        if (fileHandler == null || metaHandler == null) return;
 
         final double tolerance = Prefs.readPpTolerance(this);
         final double maxSpeed = TrackPostProcess.maxSpeedFor(trackMode);
-        final GpxWriter.Version versionAtStop = gpxVersion;
+        final GpxWriter.Version versionAtStop = segment.version;
         cleanupTasksInFlight.incrementAndGet();
 
-        // Barrière FIFO sur le worker fichier : la fermeture GPX déjà placée
-        // dans cette file doit finir avant que le nettoyeur lise le fichier.
         boolean barrierQueued = fileHandler.post(() -> {
+            final File src = segment.file;
+            if (src == null || !src.exists() || segment.openFailed
+                    || segment.writeFailed || !segment.closed) {
+                ui.post(() -> {
+                    state.setCleanResult("Trace brute conservée — segment incomplet ou ouverture GPX échouée");
+                    state.notifyChanged();
+                    finishCleanupAsync();
+                });
+                return;
+            }
             boolean cleanupQueued = metaHandler.post(() -> {
                 TrackCleaner.Outcome outcome;
                 try {
@@ -3255,8 +3348,9 @@ public class TrackingService extends Service {
                         if (segment != null && ioFile != null) {
                             boolean breakQueued = ioFile.post(() -> {
                                 try {
-                                    synchronized (segment.writer) {
-                                        if (segment.closed || segment.writeFailed) return;
+                                    synchronized (segment.ioLock) {
+                                        if (segment.closed || segment.writeFailed || segment.openFailed
+                                                || !segment.ioState.canWrite() || segment.writer == null) return;
                                         segment.writer.write(GpxWriter.segmentBreak(segment.version));
                                         segment.writer.flush();
                                         segment.lastFlushElapsedMs = android.os.SystemClock.elapsedRealtime();
