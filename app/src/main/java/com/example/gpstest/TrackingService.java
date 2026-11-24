@@ -2725,12 +2725,44 @@ public class TrackingService extends Service {
             // avant startForeground(), et un lancement rapide pourrait
             // sinon masquer le journal de la session morte précédente.
             SessionJournal previous = SessionStore.read(TrackingService.this);
-            if (previous == null || previous.noticeShown) return;
+            if (previous == null) return;
+
+            if (previous.isUnexpectedRecordingInterruption()) {
+                // Le fichier de récupération est construit sur un worker dédié :
+                // ni ioMeta (checkpoints de la nouvelle session), ni ioFile
+                // (écriture GNSS) ne sont bloqués par la copie et l'analyse XML.
+                // MainActivity peut lancer le même contrôle ; GpxRecovery le
+                // sérialise et réutilise une copie byte-à-byte identique.
+                Thread recoveryThread = new Thread(() -> {
+                    GpxRecovery.Result recovery = GpxRecovery.recover(
+                            getExternalFilesDir(null), previous.file, previous.safeLengthBytes);
+                    if (recovery.isSuccess()) {
+                        // Effacement conditionnel : ne peut pas supprimer le
+                        // journal d'une nouvelle session déjà démarrée.
+                        SessionStore.clearIfSameSession(TrackingService.this, previous.sessionId);
+                    }
+                    final String recoveryNotice = recovery.isSuccess()
+                            ? "Trace GPX récupérée : " + recovery.recoveredFileName
+                                + "\nLe fichier original " + previous.file + " est conservé."
+                            : previous.interruptionNotice() + "\nRécupération automatique non effectuée : "
+                                + recovery.message + " Le fichier original est conservé.";
+                    ui.post(() -> {
+                        if (state.isRecording()) return; // ne pas masquer le compteur courant
+                        if (recovery.isSuccess() || state.getSessionNotice() == null) {
+                            state.setSessionNotice(recoveryNotice);
+                            state.notifyChanged();
+                        }
+                    });
+                }, "gpx-session-recovery");
+                recoveryThread.setDaemon(true);
+                recoveryThread.start();
+                return;
+            }
+
+            if (previous.noticeShown) return;
             String notice = previous.interruptionNotice();
             if (notice == null) return;
             ui.post(() -> {
-                // La notice concerne explicitement la session précédente.
-                // Elle reste pertinente même si un nouveau suivi démarre.
                 if (state.getSessionNotice() == null) {
                     state.setSessionNotice(notice);
                     state.notifyChanged();

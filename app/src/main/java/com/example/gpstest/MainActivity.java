@@ -270,28 +270,54 @@ public class MainActivity extends AppCompatActivity {
         // fichier de 200 octets ne coûte rien sur un stockage sain, mais sur
         // une flash saturée ou une carte SD lente, ça peut dépasser le seuil
         // de « skipped frames ». StrictMode le signalerait.
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                if (state.isUserWantsTracking()) return;   // session vivante
-                final SessionJournal previous = SessionStore.read(MainActivity.this);
-                if (previous == null || previous.noticeShown) return;
-                final String notice = previous.interruptionNotice();
-                if (notice == null) return;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (state.getSessionNotice() == null) {
-                            state.setSessionNotice(notice);
-                            // La notice est acquittée après sa mise à l'écran,
-                            // mais le journal est conservé pour la récupération GPX.
-                            new Thread(() -> SessionStore.markNoticeShown(
-                                    MainActivity.this, previous), "session-journal-ack").start();
-                        }
-                    }
-                });
+        new Thread(() -> {
+            if (state.isUserWantsTracking()) return; // session actuellement vivante
+            final SessionJournal previous = SessionStore.read(MainActivity.this);
+            if (previous == null) return;
+
+            final boolean interruptedRecording = previous.isUnexpectedRecordingInterruption();
+            if (!interruptedRecording && previous.noticeShown) return;
+            String notice = previous.interruptionNotice();
+            if (notice == null) return;
+
+            GpxRecovery.Result recovery = null;
+            if (interruptedRecording) {
+                // La source n'est jamais tronquée : la récupération fabrique
+                // une copie *_RECUPEREE à partir du seul préfixe synchronisé.
+                recovery = GpxRecovery.recover(getExternalFilesDir(null),
+                        previous.file, previous.safeLengthBytes);
+                if (recovery.isSuccess()) {
+                    // Ne jamais effacer un journal qui aurait déjà été remplacé
+                    // par une nouvelle session démarrée pendant la copie.
+                    SessionStore.clearIfSameSession(MainActivity.this, previous.sessionId);
+                    notice = "Trace GPX récupérée : " + recovery.recoveredFileName
+                            + "\nLe fichier original " + previous.file + " est conservé. ";
+                } else {
+                    notice += "\nRécupération automatique non effectuée : "
+                            + recovery.message + " Le fichier original est conservé.";
+                }
             }
-        }, "session-journal-read").start();
+
+            final String displayNotice = notice;
+            final GpxRecovery.Result recoveryResult = recovery;
+            runOnUiThread(() -> {
+                // Ne pas remplacer l'affichage d'un nouvel enregistrement qui
+                // aurait démarré pendant la récupération de l'ancienne trace.
+                if (state.isUserWantsTracking()) return;
+                if (recoveryResult != null && recoveryResult.isSuccess()) {
+                    state.setSessionNotice(displayNotice);
+                } else if (state.getSessionNotice() == null) {
+                    state.setSessionNotice(displayNotice);
+                }
+                state.notifyChanged();
+                // Une interruption GPX non récupérée reste réessayable au
+                // prochain lancement (stockage débranché, fichier temporairement absent).
+                if (!interruptedRecording) {
+                    new Thread(() -> SessionStore.markNoticeShown(
+                            MainActivity.this, previous), "session-journal-ack").start();
+                }
+            });
+        }, "session-journal-recovery").start();
     }
 
     @Override
