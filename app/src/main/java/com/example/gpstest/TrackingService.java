@@ -1274,14 +1274,18 @@ public class TrackingService extends Service {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     // Android 12+ : requête explicite de haute précision,
                     // intervalle demandé ET intervalle minimal identiques,
-                    // aucune distance minimale, aucun fix historique initial.
-                    // Le fournisseur peut toutefois ralentir/refuser la cadence.
+                    // aucune distance minimale. Le fournisseur peut toutefois
+                    // ralentir/refuser la cadence selon le matériel et le contexte.
+                    // L'API android.location.LocationRequest.Builder ne propose
+                    // pas setMaxUpdateAgeMillis() (méthode d'autres API de
+                    // localisation). La fraîcheur de chaque fix reçu est donc
+                    // contrôlée par FixQuality avec getElapsedRealtimeNanos()
+                    // et MAX_FIX_AGE_MS ; aucun timestamp mural n'est utilisé.
                     android.location.LocationRequest request =
                             new android.location.LocationRequest.Builder(locationIntervalMs)
                                     .setMinUpdateIntervalMillis(locationIntervalMs)
                                     .setMinUpdateDistanceMeters(0f)
                                     .setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY)
-                                    .setMaxUpdateAgeMillis(0L)
                                     // Pas de batching : priorité à la chronologie
                                     // d'un logger GNSS plutôt qu'à l'économie d'IPC.
                                     .setMaxUpdateDelayMillis(0L)

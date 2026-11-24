@@ -73,3 +73,13 @@ La CI GitHub de l'archive 8A reste la voie reproductible : elle installe JDK 17,
 LOT 8B corrige les deux appels de cadrage de `MapsforgeMapRenderer` qui transmettaient un `float` là où le calculateur attend un `int`, et améliore la fidélité des stubs JVM par rapport aux signatures Android utilisées. Les 38 suites et 1 288 assertions repassent.
 
 La prochaine preuve nécessaire est toujours le résultat d'un véritable build Gradle + Android Lint via la CI ou Android Studio. LOT 8B n'est donc pas une validation Android finale.
+
+## 6. Correctif complémentaire 8B.1 — erreurs remontées par GitHub Actions
+
+La première compilation réelle GitHub Actions a atteint `:app:compileDebugJavaWithJavac` et signalé deux symboles inexistants : `DownloadManager.ERROR_HTTP_NOT_FOUND` et `android.location.LocationRequest.Builder.setMaxUpdateAgeMillis(long)`.
+
+Les deux usages ont été corrigés dans le code applicatif. Le premier est remplacé par le message générique associé à `ERROR_UNHANDLED_HTTP_CODE`, sans prétendre identifier le statut 404 exact. Le second appel est supprimé : la fraîcheur des points reste contrôlée par `FixQuality` sur le temps monotone, avec une limite de 10 secondes. Le stub JVM a été corrigé pour ne plus exposer cette méthode fictive, et le vérificateur statique empêche son retour.
+
+Voir `LOT_8B_CORRECTIF_API_ANDROID.md` pour les détails et les références API officielles.
+
+Après correction : 38 suites JVM et 1 288 assertions réussies ; 17 XML analysés ; 80 sources Java vérifiées. Le build Gradle Android doit être relancé dans GitHub Actions : aucun succès APK n'est encore revendiqué.

@@ -11,7 +11,6 @@ public final class LocationRequest {
         public Builder setMinUpdateIntervalMillis(long millis) { return this; }
         public Builder setMinUpdateDistanceMeters(float meters) { return this; }
         public Builder setQuality(int quality) { return this; }
-        public Builder setMaxUpdateAgeMillis(long millis) { return this; }
         public Builder setMaxUpdateDelayMillis(long millis) { return this; }
         public LocationRequest build() { return new LocationRequest(); }
     }

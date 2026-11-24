@@ -146,6 +146,19 @@ require("androidx.work:work-runtime:2.12.0" in app_build,
         "WorkManager 2.12.0 attendu : sa minSdk 24 correspond au projet")
 require("org.mapsforge:mapsforge-map-android:0.25.0" in app_build,
         "Dépendance Mapsforge Android épinglée non trouvée")
+
+# 6b) Signatures de plateformes Android réelles : ne pas utiliser des symboles
+# confondus avec ceux de Google Play Services ou absents du framework public.
+offline_maps = (JAVA / "OfflineMapsActivity.java").read_text(encoding="utf-8")
+fix_quality = (JAVA / "FixQuality.java").read_text(encoding="utf-8")
+require("ERROR_HTTP_NOT_FOUND" not in offline_maps,
+        "DownloadManager ne définit pas ERROR_HTTP_NOT_FOUND ; utiliser ERROR_UNHANDLED_HTTP_CODE")
+require("case DownloadManager.ERROR_UNHANDLED_HTTP_CODE" in offline_maps,
+        "Les réponses HTTP non prises en charge doivent être expliquées à l'utilisateur")
+require(".setMaxUpdateAgeMillis(" not in (JAVA / "TrackingService.java").read_text(encoding="utf-8"),
+        "android.location.LocationRequest.Builder ne définit pas setMaxUpdateAgeMillis")
+require("MAX_FIX_AGE_MS" in fix_quality and "getElapsedRealtimeNanos()" in (JAVA / "TrackingService.java").read_text(encoding="utf-8"),
+        "La fraîcheur des positions doit rester contrôlée sur l'horloge monotone")
 # Le helper de zoom travaille en pixels entiers. dp() produit un float :
 # convertir explicitement évite une erreur Java float -> int dans le renderer Android.
 map_renderer = (JAVA / "MapsforgeMapRenderer.java").read_text(encoding="utf-8")

@@ -943,8 +943,11 @@ public final class OfflineMapsActivity extends Activity {
             case DownloadManager.ERROR_FILE_ALREADY_EXISTS: return "un fichier temporaire existe déjà";
             case DownloadManager.ERROR_CANNOT_RESUME: return "le serveur ne permet pas de reprendre ce transfert";
             case DownloadManager.ERROR_HTTP_DATA_ERROR: return "erreur de transfert HTTP";
-            case DownloadManager.ERROR_UNHANDLED_HTTP_CODE: return "réponse HTTP non prise en charge";
-            case DownloadManager.ERROR_HTTP_NOT_FOUND: return "carte absente sur le serveur";
+            case DownloadManager.ERROR_UNHANDLED_HTTP_CODE:
+                // DownloadManager ne fournit pas de constante dédiée HTTP 404
+                // ni le code HTTP exact dans COLUMN_REASON. Une carte absente
+                // ou une URL incorrecte peut notamment produire ce motif.
+                return "réponse HTTP non prise en charge (carte absente ou URL incorrecte possible)";
             default: return "échec du gestionnaire Android (code " + reason + ")";
         }
     }
