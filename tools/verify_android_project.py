@@ -136,16 +136,30 @@ if manifest is not None:
 # 6) Build configuration / compatibility.
 root_build = (ROOT / "build.gradle").read_text(encoding="utf-8")
 app_build = (APP / "build.gradle").read_text(encoding="utf-8")
-require("com.android.application' version '8.13.2'" in root_build,
-        "AGP attendu 8.13.2 (réviser ce contrôle si la version change explicitement)")
+require("com.android.application' version '9.5.2'" in root_build,
+        "AGP attendu 9.5.2 (mettre à jour explicitement ce contrôle lors d'une future migration)")
 require(bool(re.search(r"compileSdk\s+36\b", app_build)), "compileSdk doit être 36")
 require(bool(re.search(r"minSdk\s+24\b", app_build)), "minSdk doit être 24")
 require(bool(re.search(r"targetSdk\s+36\b", app_build)), "targetSdk doit être 36")
 require("JavaVersion.VERSION_17" in app_build, "La compatibilité du bytecode Java 17 doit être déclarée")
+require("androidx.appcompat:appcompat:1.8.0" in app_build,
+        "AppCompat stable 1.8.0 attendu")
+require("androidx.core:core:1.19.1" in app_build,
+        "AndroidX Core stable 1.19.1 attendu")
+require("com.google.android.material:material:1.14.0" in app_build,
+        "Material Components stable 1.14.0 attendu")
 require("androidx.work:work-runtime:2.12.0" in app_build,
         "WorkManager 2.12.0 attendu : sa minSdk 24 correspond au projet")
 require("org.mapsforge:mapsforge-map-android:0.25.0" in app_build,
         "Dépendance Mapsforge Android épinglée non trouvée")
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+require("gradle-version: '9.9.2'" in workflow,
+        "La CI doit installer Gradle 9.9.2")
+require('"build-tools;36.0.0"' in workflow,
+        "La CI doit installer Android Build Tools 36.0.0")
+require((ROOT / "tools/run_jvm_tests.py").is_file()
+        and "TIMEOUT_SECONDS" in (ROOT / "tools/run_jvm_tests.py").read_text(encoding="utf-8"),
+        "Le lanceur JVM isolé avec délai maximal par suite doit être présent")
 
 # 6b) Signatures de plateformes Android réelles : ne pas utiliser des symboles
 # confondus avec ceux de Google Play Services ou absents du framework public.
@@ -159,6 +173,19 @@ require(".setMaxUpdateAgeMillis(" not in (JAVA / "TrackingService.java").read_te
         "android.location.LocationRequest.Builder ne définit pas setMaxUpdateAgeMillis")
 require("MAX_FIX_AGE_MS" in fix_quality and "getElapsedRealtimeNanos()" in (JAVA / "TrackingService.java").read_text(encoding="utf-8"),
         "La fraîcheur des positions doit rester contrôlée sur l'horloge monotone")
+# Une variable locale modifiée pendant le décodage de GnssMeasurementsEvent ne
+# peut pas être capturée directement par ui.post() : figer le texte avant la lambda.
+tracking_source = (JAVA / "TrackingService.java").read_text(encoding="utf-8")
+require("final String fullTrackingStatus" in tracking_source,
+        "Le statut Full tracking doit être figé avant publication UI")
+try:
+    ui_lambda = tracking_source.split("final String fullTrackingStatus", 1)[1]
+    ui_lambda = ui_lambda.split("ui.post(() -> {", 1)[1].split("});", 1)[0]
+    require("fullTrackingStatus" in ui_lambda
+            and re.search(r"\bfullTracking\b", ui_lambda) is None,
+            "La lambda UI ne doit capturer que fullTrackingStatus, pas la variable mutable fullTracking")
+except (IndexError, ValueError):
+    require(False, "Publication UI du statut Full tracking introuvable")
 # Le helper de zoom travaille en pixels entiers. dp() produit un float :
 # convertir explicitement évite une erreur Java float -> int dans le renderer Android.
 map_renderer = (JAVA / "MapsforgeMapRenderer.java").read_text(encoding="utf-8")
@@ -219,7 +246,7 @@ require("osmdroid" not in app_build.lower(), "Dépendance osmdroid réintroduite
 wrapper_props = ROOT / "gradle/wrapper/gradle-wrapper.properties"
 wrapper_jar = ROOT / "gradle/wrapper/gradle-wrapper.jar"
 if not (wrapper_props.exists() and wrapper_jar.exists()):
-    notes.append("Gradle Wrapper absent : utiliser la CI ou générer le wrapper localement avec Gradle 8.13.")
+    notes.append("Gradle Wrapper absent : la CI épingle Gradle 9.9.2 ; générer le wrapper avec tools/generate_gradle_wrapper.sh sur une machine équipée.")
 
 if errors:
     print(f"ÉCHEC — {len(errors)} problème(s), {len(xml_files)} XML analysés, {len(java_files)} Java examinés")

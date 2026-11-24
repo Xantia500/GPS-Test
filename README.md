@@ -41,18 +41,20 @@ Le relief ombré n'est pas proposé faute de données DEM associées. La validat
 
 ### Préparer la compilation Android (LOT 8A / 8B)
 
-La configuration du projet est épinglée sur **AGP 8.13.2 / Gradle 8.13 / JDK 17+ / SDK Platform 36 / Build Tools 35.0.0**. `minSdk 24` est cohérent avec WorkManager 2.12.0.
+La dernière vérification et mise à niveau des versions (24/11/2026) est documentée dans `docs/LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md`.
+
+La configuration du projet est épinglée sur **AGP 9.5.2 / Gradle 9.9.2 / JDK 17+ / SDK Platform 36 / Build Tools 36.0.0**. `minSdk 24` est cohérent avec WorkManager 2.12.0.
 
 Sur une machine Android :
 
 ```bash
-sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 bash tools/check_android_build_environment.sh
 ```
 
 Une CI Android est fournie dans `.github/workflows/android-build.yml`. Elle lance les contrôles statiques, les tests JVM, `assembleDebug` et Android Lint, puis publie l'APK comme artefact si tout réussit. Elle n'a pas encore été exécutée depuis ce workspace.
 
-Le projet ne contient pas encore de Gradle Wrapper : une machine équipée de Gradle 8.13 peut générer les quatre fichiers nécessaires avec `bash tools/generate_gradle_wrapper.sh`.
+Le projet ne contient pas encore de Gradle Wrapper : une machine équipée de Gradle 9.9.2 peut générer les quatre fichiers nécessaires avec `bash tools/generate_gradle_wrapper.sh`.
 
 ### ⚠️ À valider sur votre machine
 

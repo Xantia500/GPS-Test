@@ -1,18 +1,7 @@
-# Appliquer le correctif LOT 8B.1
+# Note historique — correctif LOT 8B.1
 
-Le build GitHub Actions a trouvé deux incompatibilités d'API. Le ZIP `CORRECTIF_8B_1.zip` contient les fichiers corrigés avec leurs chemins relatifs exacts.
+Ce fichier décrivait la procédure manuelle pour appliquer le correctif API Android 8B.1.
 
-## Fichiers à mettre à jour à la racine du dépôt `GPS-Test`
+**Il n'est plus nécessaire de l'appliquer séparément** : les corrections de `OfflineMapsActivity.java`, `TrackingService.java`, des stubs et du vérificateur sont déjà intégrées dans le projet courant.
 
-1. `app/src/main/java/com/example/gpstest/OfflineMapsActivity.java`
-2. `app/src/main/java/com/example/gpstest/TrackingService.java`
-3. `tools/stubs/android/location/LocationRequest.java`
-4. `tools/verify_android_project.py`
-5. Documentation : `docs/LOT_8B_CORRECTIF_API_ANDROID.md`
-6. Rapport mis à jour : `docs/LOT_8B_PREMIERE_CORRECTION_COMPILATION.md`
-
-Extraire le contenu de ce ZIP à la racine du dépôt, en conservant les sous-dossiers et en remplaçant les fichiers existants. Puis créer un commit, par exemple `Fix Android API compilation errors`, sur la branche `main`.
-
-Ne pas placer un dossier supplémentaire `GPS-Test` à l'intérieur du dépôt.
-
-Après le commit, relancer le workflow `Android build and audit` sur `main` (nouvelle exécution, pas « Re-run jobs » sur l'ancien commit).
+La configuration d'outillage a depuis été mise à jour vers AGP 9.5.2 / Gradle 9.9.2. Voir `docs/LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md`.

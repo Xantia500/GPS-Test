@@ -1576,7 +1576,7 @@ public class TrackingService extends Service {
         // enregistré à l'exécution, sinon SecurityException au boot du service.
         // On évite ContextCompat.registerReceiver : la constante
         // RECEIVER_NOT_EXPORTED n'existe que dans androidx.core récent, et
-        // appcompat 1.7.0 ne l'impose pas. Deux lignes de plus, zéro surprise.
+        // AppCompat 1.8.0 ne l'impose pas. Deux lignes de plus, zéro surprise.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -3563,6 +3563,14 @@ public class TrackingService extends Service {
                 final int measurementCount = event.getMeasurements().size();
                 final int agcCount = eventAgcs.size();
                 final double avgCn0 = cn0Count > 0 ? cn0Sum / cn0Count : Double.NaN;
+                // Capturer un texte immuable pour la publication UI. fullTracking est
+                // volontairement renseigné après son initialisation (API 34+) et n'est
+                // donc pas une variable effectivement finale au sens du langage Java.
+                // La lambda ne doit capturer que cet instantané final.
+                final String fullTrackingStatus = Build.VERSION.SDK_INT >= 34
+                        ? " · full tracking rapporté : "
+                                + (fullTracking == null ? "—" : fullTracking.toString())
+                        : "";
                 ui.post(() -> {
                     state.setRawMeasurementsPreview(previewText.isEmpty()
                             ? "Événement reçu sans mesure satellite exploitable. AGC : " + agcCount
@@ -3570,9 +3578,7 @@ public class TrackingService extends Service {
                     state.setRawMeasurementsStatusLastCallback("Dernier événement : " + measurementCount
                             + " mesures · " + agcCount + " AGC · C/N0 moyen "
                             + (Double.isFinite(avgCn0) ? String.format(Locale.FRANCE, "%.1f dB-Hz", avgCn0) : "—")
-                            + (Build.VERSION.SDK_INT >= 34
-                                ? " · full tracking rapporté : " + (fullTracking == null ? "—" : fullTracking)
-                                : ""));
+                            + fullTrackingStatus);
                     state.notifyChanged();
                 });
             }

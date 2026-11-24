@@ -1,3 +1,5 @@
+> **Note de version (24 novembre 2026) :** ce rapport décrit l’état historique du LOT 8A (AGP 8.13.2 / Gradle 8.13 / Build Tools 35.0.0). La configuration active a depuis été mise à niveau vers AGP 9.5.2 / Gradle 9.9.2 / Build Tools 36.0.0. Voir `docs/LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md`.
+
 # LOT 8A — Audit global et préparation de la compilation Android
 
 Date : 23 novembre 2026  
@@ -156,3 +158,20 @@ Les fichiers du wrapper générés devront être versionnés ensemble : `gradlew
 La configuration build est cohérente sur le papier, l'outillage de vérification est renforcé et le contrôle des callbacks GNSS a corrigé un risque de compatibilité concret avec les API 24–29. La suite JVM et les contrôles statiques passent. Le blocage restant est matériel/environnemental : le projet n'a pas encore été compilé par Android Gradle Plugin et aucun APK ne doit être considéré comme validé.
 
 Le résultat de la CI Android ou d'une compilation Android Studio devient la prochaine preuve attendue avant d'entamer les correctifs de compilation du LOT 8B.
+
+
+## Mise à niveau de l'outillage (24 novembre 2026)
+
+Cette configuration historique AGP 8.13.2 / Gradle 8.13 a été remplacée par :
+
+- Android Gradle Plugin 9.5.2 (stable le plus récent vérifié).
+- Gradle 9.9.2 (stable le plus récent vérifié).
+- JDK 17 (minimum AGP 9.5).
+- SDK Platform 36 / compileSdk 36 / targetSdk 36.
+- Android Build Tools 36.0.0.
+- AppCompat 1.8.0, AndroidX Core 1.19.1, Material Components 1.14.0, WorkManager 2.12.0.
+- Mapsforge reste épinglé à 0.25.0, version publiée sur Maven Central ; pas de migration vers une version upstream non publiée dans ce dépôt.
+
+Android 17 / API 37 est encore indiqué en bêta sur la page officielle des mises à jour au 24/11/2026 ; Google Play exige API 36 ou supérieure depuis le 31/08/2026. On reste donc en API 36 stable, sans cibler une préversion.
+
+Cette migration n'a pas été compilée dans le conteneur de travail : la CI GitHub doit confirmer la compatibilité effective d'AGP 9.5.2 avec tous les scripts et dépendances du projet.

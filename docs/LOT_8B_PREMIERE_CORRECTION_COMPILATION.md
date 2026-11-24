@@ -1,3 +1,5 @@
+> **Note de version (24 novembre 2026) :** ce rapport documente la première passe 8B sous AGP 8.13.2 / Gradle 8.13. Il est historique ; l’outillage actif est désormais AGP 9.5.2 / Gradle 9.9.2 / Build Tools 36.0.0. Voir `LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md`.
+
 # LOT 8B — Première correction de compilation et revue des signatures Android
 
 Date : 23 novembre 2026  
