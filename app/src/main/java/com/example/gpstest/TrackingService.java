@@ -151,7 +151,7 @@ public class TrackingService extends Service {
     private volatile RecordingSegment lastClosedSegment = null;
     /** Identité unique du suivi logique courant ; change à chaque nouveau START. */
     private volatile String sessionId = "";
-    private volatile int nextSegmentId = 0;
+    private volatile long nextSegmentId = 0L;
     private volatile int gpxPointsInSegment = 0;
 
     /**
@@ -174,7 +174,9 @@ public class TrackingService extends Service {
      *  cet objet, jamais des champs globaux susceptibles d'appartenir au
      *  segment suivant. L'URI SAF lui appartient jusqu'à la publication finale. */
     private static final class RecordingSegment {
-        final int id;
+        final long id;
+        final String sessionId;
+        final GpxCheckpoint checkpoint = new GpxCheckpoint();
         volatile File file;
         volatile File snapshotFile;
         final android.net.Uri destinationTree;
@@ -198,9 +200,10 @@ public class TrackingService extends Service {
         volatile boolean writeFailed;
         volatile boolean openFailed;
 
-        RecordingSegment(int id, android.net.Uri tree, GpxWriter.Version version,
-                         int counterEpoch, long nowElapsed) {
+        RecordingSegment(long id, String sessionId, android.net.Uri tree,
+                         GpxWriter.Version version, int counterEpoch, long nowElapsed) {
             this.id = id;
+            this.sessionId = sessionId == null ? "" : sessionId;
             this.destinationTree = tree;
             this.publishEnabled = tree != null;
             this.version = version;
@@ -310,6 +313,12 @@ public class TrackingService extends Service {
     /** Le nettoyage asynchrone est suivi sans bloquer onDestroy(). */
     private final AtomicInteger cleanupTasksInFlight = new AtomicInteger();
     private volatile boolean serviceDestroying = false;
+    /**
+     * L'état UI recording est remis à false pendant onDestroy(), mais le
+     * snapshot durable final doit conserver le fait qu'une trace était active
+     * au moment d'une destruction non volontaire.
+     */
+    private volatile boolean serviceDestroyedWhileRecording = false;
 
     /** Instant (monotone) de réception du dernier GnssStatus, 0 si jamais. */
     private volatile long gnssStatusElapsedMs = 0L;
@@ -868,6 +877,7 @@ public class TrackingService extends Service {
 
     @Override
     public void onDestroy() {
+        serviceDestroyedWhileRecording = !stopRequested && state.isRecording();
         serviceDestroying = true; // refuser les événements GNSS déjà en file
         // ARRÊT SUBI ou VOLONTAIRE ? Toute la différence est ici :
         //   - stopRequested  -> l'utilisateur a appuyé sur ARRÊTER : on efface
@@ -1646,6 +1656,28 @@ public class TrackingService extends Service {
         // permet d'écarter une écriture retardée appartenant à un ancien START.
         final String snapshotSessionId = sessionId;
         if (snapshotSessionId == null || snapshotSessionId.isEmpty()) return;
+        // Le checkpoint est lu depuis l'objet segment lui-même : la longueur
+        // est publiée seulement après flush + FileDescriptor.sync() sur ioFile.
+        // Un segment en attente d'ouverture possède déjà une génération, mais
+        // pas encore de nom de fichier ni d'offset sûr.
+        final RecordingSegment journalSegment = activeSegment != null
+                ? activeSegment : lastClosedSegment;
+        final GpxCheckpoint.Snapshot checkpoint = journalSegment != null
+                ? journalSegment.checkpoint.snapshot() : null;
+        final String journalFile = checkpoint != null && !checkpoint.fileName.isEmpty()
+                ? checkpoint.fileName
+                : (journalSegment == null && gpxFile != null ? gpxFile.getName()
+                    : (journalSegment == null && state.getLastGpxFile() != null
+                        ? state.getLastGpxFile() : ""));
+        final long safeLength = checkpoint != null ? checkpoint.safeLengthBytes : 0L;
+        final long segmentGeneration = journalSegment != null
+                ? journalSegment.id : nextSegmentId;
+        // onDestroy() remet state.recording à false pour l'interface après
+        // avoir demandé la fermeture. Le snapshot final, exécuté plus tard
+        // après drainage de ioFile, doit néanmoins se souvenir qu'un
+        // enregistrement était actif si la destruction n'était pas volontaire.
+        final boolean journalRecording = state.isRecording()
+                || (serviceDestroying && !stopRequested && serviceDestroyedWhileRecording);
         final SessionJournal journal = SessionJournal.of(
                 snapshotSessionId,
                 // Le journal reste dirty jusqu'à l'arrêt explicite qui l'efface.
@@ -1655,15 +1687,15 @@ public class TrackingService extends Service {
                 true,
                 state.getSessionStartMs(),
                 System.currentTimeMillis(),
-                state.isRecording(),
+                journalRecording,
                 state.isSuspended(),
                 state.getTrackPoints(),
                 state.getGpxSegment(),
                 gpxPointsInSegment,
                 policy != null ? policy.id : 0,
-                gpxFile != null ? gpxFile.getName()
-                        : (state.getLastGpxFile() != null ? state.getLastGpxFile() : ""),
-                0L // LOT 8C-R2 : remplacé par le dernier checkpoint flush + fd.sync.
+                journalFile,
+                safeLength,
+                segmentGeneration
         );
 
         // Le journal est écrit en interne via AtomicFile. Il reste dans une file
@@ -1800,7 +1832,7 @@ public class TrackingService extends Service {
         state.setGpxDurabilityWarning(null);
 
         final RecordingSegment segment = new RecordingSegment(++nextSegmentId,
-                tree, ver, counterEpoch, nowElapsedMs);
+                sessionId, tree, ver, counterEpoch, nowElapsedMs);
         activeSegment = segment;
 
         // IMPORTANT : cette post est exécutée alors que l'appelant détient
@@ -1835,18 +1867,24 @@ public class TrackingService extends Service {
                     throw new java.io.IOException("Impossible de créer le dossier GPX");
                 }
                 file = uniqueFile(new File(dir, base));
+                segment.file = file;
+                segment.snapshotFile = new File(file.getParentFile(),
+                        file.getName() + ".publish.tmp");
+                if (!segment.checkpoint.register(file.getName())) {
+                    throw new java.io.IOException("Nom de fichier GPX invalide pour le checkpoint");
+                }
+                // Enregistrer l'identité du segment avant de publier son
+                // premier checkpoint : ioMeta recevra ainsi toujours
+                // registerSegment puis updateCheckpoint dans cet ordre.
+                queueSegmentRegistration(segment);
                 // uniqueFile() réserve le nom avec createNewFile() (création
-                // exclusive). append=true évite qu'une éventuelle ouverture
-                // concurrente ne soit détruite par une troncature implicite.
+                // exclusive). append=true évite toute troncature implicite.
                 output = new FileOutputStream(file, true);
                 writer = new BufferedWriter(
                         new OutputStreamWriter(output, StandardCharsets.UTF_8), 8192);
                 writer.write(GpxWriter.header(segment.version, "GPS Test — trace", nowWallMs));
                 writer.flush();
 
-                segment.file = file;
-                segment.snapshotFile = new File(file.getParentFile(),
-                        file.getName() + ".publish.tmp");
                 segment.output = output;
                 segment.writer = writer;
                 if (!segment.ioState.markReady()) {
@@ -1854,6 +1892,10 @@ public class TrackingService extends Service {
                 }
                 segment.lastFlushElapsedMs = android.os.SystemClock.elapsedRealtime();
                 segment.lastSyncElapsedMs = segment.lastFlushElapsedMs;
+                // Établir immédiatement un premier préfixe sûr contenant
+                // l'en-tête. Sans ce sync initial, une interruption avant le
+                // premier jalon de 30 s laisserait le journal à longueur zéro.
+                syncSegmentAndCheckpoint(segment);
             }
 
             final File openedFile = file;
@@ -1874,6 +1916,9 @@ public class TrackingService extends Service {
                 segment.file = file;
                 segment.snapshotFile = file != null
                         ? new File(file.getParentFile(), file.getName() + ".publish.tmp") : null;
+                if (file != null && segment.checkpoint.snapshot().fileName.isEmpty()) {
+                    segment.checkpoint.register(file.getName());
+                }
                 segment.output = null;
                 segment.writer = null;
                 segment.openFailed = true;
@@ -1881,6 +1926,7 @@ public class TrackingService extends Service {
                 segment.ioState.failOpen();
             }
             final File failedFile = file;
+            if (failedFile != null) queueSegmentRegistration(segment);
             if (failedFile != null && isLatestCounterSegment(segment)) gpxFile = failedFile;
             final String message = "Échec d'ouverture GPX : " + e.getClass().getSimpleName()
                     + (e.getMessage() != null ? " — " + e.getMessage() : "");
@@ -1893,6 +1939,7 @@ public class TrackingService extends Service {
                 if (activeSegment == segment) {
                     activeSegment = null;
                     segment.acceptingPoints = false;
+                    lastClosedSegment = segment;
                     state.setRecording(false);
                 }
                 state.setGpxError(message);
@@ -1991,24 +2038,12 @@ public class TrackingService extends Service {
                             segment.writer.flush();
                             segment.lastFlushElapsedMs = now;
                         }
-                        written = true; // le writer a accepté le point
+                        written = true; // le point complet a été remis au writer
                         if (now - segment.lastSyncElapsedMs >= SYNC_EVERY_MS) {
-                            // sync() ne voit que les octets déjà remis au FD :
-                            // vider d'abord le BufferedWriter, puis synchroniser.
-                            segment.writer.flush();
-                            segment.lastFlushElapsedMs = now;
-                            try {
-                                segment.output.getFD().sync();
-                                reportSegmentDurability(segment, null);
-                            } catch (Exception syncError) {
-                                final String warning = "Synchronisation stockage GPX non confirmée : "
-                                        + syncError.getClass().getSimpleName();
-                                reportSegmentDurability(segment, warning);
-                            } finally {
-                                // Évite une tentative fsync à chaque point si
-                                // le fournisseur de stockage refuse sync().
-                                segment.lastSyncElapsedMs = now;
-                            }
+                            // Le helper ne publie la longueur qu'après flush +
+                            // succès de FileDescriptor.sync(). Il s'exécute
+                            // dans cette tâche FIFO, après l'écriture complète du point.
+                            syncSegmentAndCheckpoint(segment);
                         }
                     }
                 } catch (Exception e) {
@@ -2057,6 +2092,78 @@ public class TrackingService extends Service {
                 && segment.counterEpoch == state.getTrackCounterEpoch();
     }
 
+    /**
+     * Confirme un checkpoint sur ioFile : flush, fsync, puis lecture de la
+     * longueur exacte du fichier. Aucun offset n'est annoncé si fsync échoue.
+     * L'appelant détient déjà segment.ioLock et se trouve dans la FIFO GPX.
+     */
+    private void syncSegmentAndCheckpoint(RecordingSegment segment) throws java.io.IOException {
+        if (segment == null || segment.writer == null || segment.output == null
+                || segment.file == null || segment.writeFailed || segment.openFailed) return;
+        segment.writer.flush();
+        long now = android.os.SystemClock.elapsedRealtime();
+        segment.lastFlushElapsedMs = now;
+        try {
+            segment.output.getFD().sync();
+        } catch (java.io.IOException syncError) {
+            segment.lastSyncElapsedMs = now; // éviter un fsync à chaque point si le FS refuse
+            reportSegmentDurability(segment, "Synchronisation stockage GPX non confirmée : "
+                    + syncError.getClass().getSimpleName());
+            return;
+        }
+
+        long length = segment.file.length();
+        if (!segment.checkpoint.advance(segment.file.getName(), length)) {
+            reportSegmentDurability(segment, "Checkpoint GPX non avancé : longueur incohérente ou fichier changé");
+            segment.lastSyncElapsedMs = now;
+            return;
+        }
+        segment.lastSyncElapsedMs = now;
+        queueSegmentCheckpoint(segment, length);
+        reportSegmentDurability(segment, null);
+    }
+
+    /** Enregistre l'association génération/fichier dès que le nom est réservé. */
+    private void queueSegmentRegistration(final RecordingSegment segment) {
+        if (segment == null || segment.file == null) return;
+        final Handler meta = ioMeta;
+        if (meta == null) return; // persistSessionTo() reprendra le snapshot en fin de FIFO
+        final String name = segment.file.getName();
+        boolean queued = meta.post(() -> {
+            if (!segment.sessionId.equals(sessionId)) return;
+            if (!SessionStore.registerSegment(TrackingService.this, segment.sessionId,
+                    segment.id, name)) {
+                android.util.Log.w("TrackingService", "Association du segment au journal différée ou refusée : " + name);
+            }
+        });
+        if (!queued) {
+            android.util.Log.w("TrackingService", "Association du segment non mise en file : " + name);
+        }
+    }
+
+    /** Publie uniquement un checkpoint du fichier et de la génération qui l'ont produit. */
+    private void queueSegmentCheckpoint(final RecordingSegment segment, final long length) {
+        if (segment == null || segment.file == null || length <= 0L) return;
+        final Handler meta = ioMeta;
+        if (meta == null) return; // le snapshot de fermeture sur ioFile contient encore l'offset
+        final String name = segment.file.getName();
+        boolean queued = meta.post(() -> {
+            if (!segment.sessionId.equals(sessionId)) return;
+            if (!SessionStore.updateCheckpoint(TrackingService.this, segment.sessionId,
+                    segment.id, name, length)) {
+                android.util.Log.w("TrackingService", "Checkpoint GPX non inscrit (session/segment différent ou journal absent) : " + name);
+                if (isLatestCounterSegment(segment)) {
+                    reportSegmentDurability(segment,
+                            "Préfixe GPX synchronisé, mais checkpoint du journal non confirmé");
+                }
+            }
+        });
+        if (!queued) {
+            reportSegmentDurability(segment,
+                    "Préfixe GPX synchronisé, mais file du journal indisponible");
+        }
+    }
+
     private void reportSegmentGpxError(RecordingSegment segment, String message) {
         ui.post(() -> {
             if (isLatestCounterSegment(segment)) {
@@ -2089,20 +2196,12 @@ public class TrackingService extends Service {
                 synchronized (segment.ioLock) {
                     if (!segment.closed && !segment.openFailed
                             && segment.ioState.canWrite() && segment.writer != null) {
-                        segment.writer.flush();
                         long now = android.os.SystemClock.elapsedRealtime();
-                        segment.lastFlushElapsedMs = now;
                         if (now - segment.lastSyncElapsedMs >= SYNC_EVERY_MS) {
-                            try {
-                                segment.output.getFD().sync();
-                                reportSegmentDurability(segment, null);
-                            } catch (Exception syncError) {
-                                final String warning = "Synchronisation stockage GPX non confirmée : "
-                                        + syncError.getClass().getSimpleName();
-                                reportSegmentDurability(segment, warning);
-                            } finally {
-                                segment.lastSyncElapsedMs = now;
-                            }
+                            syncSegmentAndCheckpoint(segment);
+                        } else {
+                            segment.writer.flush();
+                            segment.lastFlushElapsedMs = now;
                         }
                     }
                 }
@@ -2275,14 +2374,9 @@ public class TrackingService extends Service {
                     if (segment.ioState.canWrite() && segment.writer != null
                             && !segment.writeFailed) {
                         segment.writer.write(GpxWriter.footer());
-                        segment.writer.flush();
-                        try {
-                            segment.output.getFD().sync();
-                            reportSegmentDurability(segment, null);
-                        } catch (Exception syncError) {
-                            reportSegmentDurability(segment, "Synchronisation finale GPX non confirmée : "
-                                    + syncError.getClass().getSimpleName());
-                        }
+                        // Le checkpoint final inclut le pied : si sync réussit,
+                        // le préfixe enregistré correspond au GPX complet fermé.
+                        syncSegmentAndCheckpoint(segment);
                         segment.writer.close();
                         closedCleanly = true;
                     } else {

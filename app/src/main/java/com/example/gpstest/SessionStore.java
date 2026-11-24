@@ -102,13 +102,31 @@ public final class SessionStore {
                 if (!preserveUnreadableState(base)) return false;
             }
             if (current != null && current.sessionId.equals(journal.sessionId)) {
-                // Toutes les écritures du service sont sérialisées sur ioMeta.
-                // La révision est donc incrémentée dans le même ordre que les
-                // snapshots ; les acquittements de notice passent par le même LOCK.
-                journal.revision = current.revision == Long.MAX_VALUE
-                        ? Long.MAX_VALUE : current.revision + 1L;
+                // Les snapshots d'un segment ancien peuvent arriver après le
+                // démarrage du suivant (threads UI, ioFile et ioMeta). La
+                // génération empêche un état retardé de faire reculer le journal.
+                if (journal.segmentGeneration < current.segmentGeneration) return false;
+                if (journal.segmentGeneration == current.segmentGeneration) {
+                    if (journal.file.isEmpty() && !current.file.isEmpty()) {
+                        // Snapshot capturé pendant OPENING, committé après la
+                        // réservation du fichier : garder l'identité déjà liée.
+                        journal.file = current.file;
+                        journal.safeLengthBytes = current.safeLengthBytes;
+                    } else if (journal.file.equals(current.file)) {
+                        // Un snapshot UI plus ancien ne peut pas faire régresser
+                        // le dernier préfixe confirmé par FileDescriptor.sync().
+                        journal.safeLengthBytes = Math.max(journal.safeLengthBytes,
+                                current.safeLengthBytes);
+                    } else if (!current.file.isEmpty()) {
+                        // Deux noms différents pour une même génération indiquent
+                        // un snapshot incohérent : ne pas changer de fichier.
+                        return false;
+                    }
+                }
                 // Une mise à jour ultérieure du service ne doit pas faire réapparaître
                 // une notice déjà présentée pour cette même session.
+                journal.revision = current.revision == Long.MAX_VALUE
+                        ? Long.MAX_VALUE : current.revision + 1L;
                 journal.noticeShown = journal.noticeShown || current.noticeShown;
             } else {
                 journal.revision = Math.max(1L, journal.revision);
@@ -118,6 +136,68 @@ public final class SessionStore {
             // migration réussie. S'il coexiste avec un interne illisible, on
             // le conserve au lieu de le détruire au premier nouveau START.
             return true;
+        }
+    }
+
+
+    /**
+     * Lie le journal au fichier d'un segment nouvellement ouvert.
+     * Appelé depuis ioFile dès que le nom du fichier a été réservé, avant le
+     * premier checkpoint. La FIFO ioMeta reçoit donc l'association avant tout
+     * updateCheckpoint de ce segment. Une génération plus ancienne est refusée.
+     */
+    public static boolean registerSegment(Context ctx, String expectedSessionId,
+                                          long segmentGeneration, String fileName) {
+        if (expectedSessionId == null || expectedSessionId.trim().isEmpty()
+                || segmentGeneration < 0L) return false;
+        SessionJournal probe = SessionJournal.of(expectedSessionId, true,
+                0L, 0L, true, false, 0L, 0, 0L, 0, fileName, 0L,
+                segmentGeneration);
+        if (probe.file.isEmpty()) return false;
+        synchronized (LOCK) {
+            SessionJournal current = readLocked(ctx);
+            if (current == null || !expectedSessionId.equals(current.sessionId)
+                    || segmentGeneration < current.segmentGeneration) return false;
+            if (segmentGeneration == current.segmentGeneration) {
+                if (!current.file.isEmpty() && !current.file.equals(probe.file)) return false;
+                if (current.file.equals(probe.file)) return true;
+            }
+            current.segmentGeneration = segmentGeneration;
+            current.file = probe.file;
+            current.safeLengthBytes = 0L;
+            current.segmentPoints = 0L;
+            current.savedAtMs = System.currentTimeMillis();
+            current.revision = current.revision == Long.MAX_VALUE
+                    ? Long.MAX_VALUE : current.revision + 1L;
+            return writeLocked(ctx, current);
+        }
+    }
+
+    /**
+     * Enregistre uniquement un préfixe déjà flushé puis synchronisé sur le FD.
+     * Le nom ET la génération doivent correspondre au segment encore courant.
+     */
+    public static boolean updateCheckpoint(Context ctx, String expectedSessionId,
+                                           long segmentGeneration, String fileName,
+                                           long safeLengthBytes) {
+        if (expectedSessionId == null || expectedSessionId.trim().isEmpty()
+                || segmentGeneration < 0L || safeLengthBytes <= 0L) return false;
+        SessionJournal probe = SessionJournal.of(expectedSessionId, true,
+                0L, 0L, true, false, 0L, 0, 0L, 0, fileName, safeLengthBytes,
+                segmentGeneration);
+        if (probe.file.isEmpty()) return false;
+        synchronized (LOCK) {
+            SessionJournal current = readLocked(ctx);
+            if (current == null || !expectedSessionId.equals(current.sessionId)
+                    || current.segmentGeneration != segmentGeneration
+                    || !current.file.equals(probe.file)
+                    || safeLengthBytes < current.safeLengthBytes) return false;
+            if (safeLengthBytes == current.safeLengthBytes) return true;
+            current.safeLengthBytes = safeLengthBytes;
+            current.savedAtMs = System.currentTimeMillis();
+            current.revision = current.revision == Long.MAX_VALUE
+                    ? Long.MAX_VALUE : current.revision + 1L;
+            return writeLocked(ctx, current);
         }
     }
 

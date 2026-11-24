@@ -9,13 +9,14 @@ import java.util.UUID;
  * persistance atomique et la migration des emplacements historiques sont
  * assurées par SessionStore.
  *
- * FORMAT 4 : ajoute une identité de session, une révision, l'état de livraison
- * de la notice et l'offset GPX sûr. Les formats plus anciens restent lisibles.
+ * FORMAT 5 : ajoute la génération du segment GPX afin de lier chaque offset
+ * sûr au bon fichier et de rejeter les snapshots retardés d'un segment ancien.
+ * Les formats plus anciens restent lisibles.
  */
 public final class SessionJournal {
 
     public static final String FILE_NAME = "session.state";
-    public static final int FORMAT_VERSION = 4;
+    public static final int FORMAT_VERSION = 5;
     private static final int MAX_FILE_NAME_LENGTH = 512;
     private static final int MAX_SESSION_ID_LENGTH = 160;
 
@@ -39,6 +40,8 @@ public final class SessionJournal {
     public int policyId;
     /** Nom du fichier local app-specific, jamais un chemin fourni par l'utilisateur. */
     public String file = "";
+    /** Génération monotone du segment dans la session courante. */
+    public long segmentGeneration;
     /** Longueur du préfixe GPX synchronisé, 0 si aucun checkpoint n'est disponible. */
     public long safeLengthBytes;
     /** La notice correspondant à cette interruption a déjà été présentée. */
@@ -74,6 +77,17 @@ public final class SessionJournal {
                                     boolean recording, boolean suspended,
                                     long points, int segment, long segmentPoints,
                                     int policyId, String file, long safeLengthBytes) {
+        return of(sessionId, dirty, startMs, savedAtMs, recording, suspended,
+                points, segment, segmentPoints, policyId, file, safeLengthBytes, 0L);
+    }
+
+    /** Snapshot lié à une génération précise du segment GPX. */
+    public static SessionJournal of(String sessionId, boolean dirty,
+                                    long startMs, long savedAtMs,
+                                    boolean recording, boolean suspended,
+                                    long points, int segment, long segmentPoints,
+                                    int policyId, String file, long safeLengthBytes,
+                                    long segmentGeneration) {
         SessionJournal j = new SessionJournal();
         j.sessionId = normalizeSessionId(sessionId);
         if (j.sessionId.isEmpty()) j.sessionId = newSessionId();
@@ -89,6 +103,7 @@ public final class SessionJournal {
         j.segmentPoints = Math.max(0L, segmentPoints);
         j.policyId = policyId;
         j.file = normalizeFileName(file);
+        j.segmentGeneration = Math.max(0L, segmentGeneration);
         j.safeLengthBytes = Math.max(0L, safeLengthBytes);
         return j;
     }
@@ -120,6 +135,7 @@ public final class SessionJournal {
         sb.append("savedAt=").append(savedAtMs).append('\n');
         sb.append("dirty=").append(dirty).append('\n');
         sb.append("expectedAlive=").append(expectedAlive).append('\n');
+        sb.append("segmentGeneration=").append(segmentGeneration).append('\n');
         sb.append("safeLength=").append(safeLengthBytes).append('\n');
         sb.append("noticeShown=").append(noticeShown).append('\n');
         return sb.toString();
@@ -168,6 +184,7 @@ public final class SessionJournal {
                     case "segment":      j.segment = parseIntSafely(val, 0); break;
                     case "segmentPoints":j.segmentPoints = parseLongSafely(val, 0L); break;
                     case "policy":       j.policyId = parseIntSafely(val, 0); break;
+                    case "segmentGeneration": j.segmentGeneration = parseLongSafely(val, 0L); break;
                     case "safeLength":   j.safeLengthBytes = parseLongSafely(val, 0L); break;
                     case "recording": {
                         Boolean parsed = parseBooleanNullable(val);
@@ -214,6 +231,7 @@ public final class SessionJournal {
         j.points = Math.max(0L, j.points);
         j.segment = Math.max(0, j.segment);
         j.segmentPoints = Math.max(0L, j.segmentPoints);
+        j.segmentGeneration = Math.max(0L, j.segmentGeneration);
         j.safeLengthBytes = Math.max(0L, j.safeLengthBytes);
         j.revision = Math.max(1L, j.revision);
         j.file = normalizeFileName(j.file);
@@ -242,8 +260,9 @@ public final class SessionJournal {
         if (file == null || file.trim().isEmpty()) return null;
         long n = segmentPoints > 0L ? segmentPoints : points;
         if (safeLengthBytes > 0L) {
-            return "Enregistrement GPX interrompu : " + file + " (checkpoint sûr : "
-                    + n + " points). La fin du fichier doit être vérifiée.";
+            return "Enregistrement GPX interrompu : " + file + " (préfixe synchronisé : "
+                    + safeLengthBytes + " octets ; " + n
+                    + " points connus au dernier état). La fin du fichier doit être vérifiée.";
         }
         if (n > 0L) {
             return "Enregistrement GPX interrompu : " + file + " (" + n

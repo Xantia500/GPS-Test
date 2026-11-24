@@ -94,6 +94,10 @@ public class SessionJournalTest {
         ok(notice.contains("trace.gpx"), "la notice nomme le fichier");
         ok(notice.contains("250"),
                 "la notice donne les points DU SEGMENT (250), pas du total (5000)");
+        SessionJournal durableNotice = SessionJournal.of("notice-session", true,
+                1L, 2L, true, false, 500L, 3, 250L, 0, "trace.gpx", 8_192L, 3L);
+        ok(durableNotice.interruptionNotice().contains("8192 octets"),
+                "la notice durable affiche la longueur réellement synchronisée en octets");
         ok(notice.toLowerCase().contains("vérifier"),
                 "la notice indique que la fin du fichier doit être vérifiée");
 
@@ -161,6 +165,19 @@ public class SessionJournalTest {
         ok(checkpointRoundTrip != null, "format 4 relu");
         ok("session-123".equals(checkpointRoundTrip.sessionId), "identité stable après parsing");
         ok(checkpointRoundTrip.safeLengthBytes == 123_456L, "offset checkpoint conservé");
+        ok(checkpointRoundTrip.segmentGeneration == 0L, "les API historiques gardent une génération nulle");
+        ok(checkpoint.toText().contains("format=5\n"), "le format 5 annonce la génération du segment");
+        SessionJournal generationRoundTrip = SessionJournal.of("session-123", true,
+                10L, 20L, true, false, 9_000L, 4, 500L, 2,
+                "trace-reprise.gpx", 123_456L, 42L);
+        SessionJournal generationBack = SessionJournal.parse(generationRoundTrip.toText());
+        ok(generationBack != null && generationBack.segmentGeneration == 42L,
+                "la génération du segment survit au round-trip du format 5");
+        SessionJournal formatFour = SessionJournal.parse("format=4\nsessionId=legacy-v4\n"
+                + "dirty=true\nrecording=true\nsuspended=false\nfile=old.gpx\nsafeLength=2048\n");
+        ok(formatFour != null && formatFour.segmentGeneration == 0L
+                        && formatFour.safeLengthBytes == 2048L,
+                "un journal format 4 reste lisible sans génération de segment");
         ok(checkpointRoundTrip.segmentPoints == 500L, "compteur de segment conservé");
         ok(!checkpointRoundTrip.noticeShown, "notice non acquittée par défaut");
         checkpointRoundTrip.noticeShown = true;

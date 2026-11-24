@@ -34,10 +34,57 @@ public final class SessionStoreTest {
         ok(read.safeLengthBytes == 4_096L, "checkpoint relu");
         long firstRevision = read.revision;
         SessionJournal refreshed = SessionJournal.of(id, true, 100L, 201L,
-                true, false, 56L, 1, 56L, 0, "track.gpx", 4_096L);
+                true, false, 56L, 1, 56L, 0, "track.gpx", 0L);
         ok(SessionStore.write(context, refreshed), "snapshot suivant écrit pour la même session");
         SessionJournal afterRefresh = SessionStore.read(context);
         ok(afterRefresh.revision > firstRevision, "révision incrémentée à chaque snapshot du même identifiant");
+        ok(afterRefresh.safeLengthBytes == 4_096L,
+                "un snapshot plus ancien ne fait pas régresser le checkpoint du même fichier");
+
+        section("Checkpoint lié au bon segment et protégé des snapshots retardés");
+        SessionStore.clear(context);
+        SessionJournal generationOne = SessionJournal.of("generation-session", true,
+                10L, 20L, true, false, 1L, 0, 0L, 0, "", 0L, 1L);
+        ok(SessionStore.write(context, generationOne), "journal initial de génération 1 écrit");
+        ok(SessionStore.registerSegment(context, "generation-session", 1L, "segment-1.gpx"),
+                "ouverture du segment 1 associée au journal");
+        ok(SessionStore.updateCheckpoint(context, "generation-session", 1L,
+                "segment-1.gpx", 8_192L), "checkpoint synchronisé du segment 1 écrit");
+        ok(!SessionStore.updateCheckpoint(context, "generation-session", 1L,
+                "segment-1.gpx", 4_096L), "un checkpoint régressif est refusé");
+        ok(!SessionStore.updateCheckpoint(context, "generation-session", 1L,
+                "autre-fichier.gpx", 16_384L), "un checkpoint d'un autre fichier est refusé");
+        SessionJournal currentCheckpoint = SessionStore.read(context);
+        ok(currentCheckpoint.safeLengthBytes == 8_192L,
+                "le dernier offset durable reste monotone");
+        SessionJournal openingSnapshot = SessionJournal.of("generation-session", true,
+                10L, 30L, true, false, 2L, 0, 0L, 0, "", 0L, 1L);
+        ok(SessionStore.write(context, openingSnapshot),
+                "snapshot OPENING du même segment accepté sans écraser le fichier déjà réservé");
+        SessionJournal afterOpeningSnapshot = SessionStore.read(context);
+        ok("segment-1.gpx".equals(afterOpeningSnapshot.file)
+                        && afterOpeningSnapshot.safeLengthBytes == 8_192L,
+                "le nom et le checkpoint survivent au snapshot OPENING retardé");
+        SessionJournal generationTwo = SessionJournal.of("generation-session", true,
+                10L, 40L, true, false, 0L, 1, 0L, 0, "", 0L, 2L);
+        ok(SessionStore.write(context, generationTwo), "nouvelle génération de segment acceptée");
+        SessionJournal afterGenerationTwo = SessionStore.read(context);
+        ok(afterGenerationTwo.segmentGeneration == 2L && afterGenerationTwo.file.isEmpty()
+                        && afterGenerationTwo.safeLengthBytes == 0L,
+                "le nouveau segment repart sans hériter du fichier ni de l'offset précédent");
+        ok(!SessionStore.updateCheckpoint(context, "generation-session", 1L,
+                "segment-1.gpx", 16_384L), "un checkpoint retardé du segment 1 est rejeté");
+        ok(SessionStore.registerSegment(context, "generation-session", 2L, "segment-2.gpx"),
+                "le fichier du segment 2 est enregistré");
+        ok(SessionStore.updateCheckpoint(context, "generation-session", 2L,
+                "segment-2.gpx", 1_024L), "le segment 2 peut enregistrer son propre checkpoint");
+        SessionJournal staleGenerationOne = SessionJournal.of("generation-session", true,
+                10L, 50L, true, false, 1L, 0, 1L, 0, "segment-1.gpx", 16_384L, 1L);
+        ok(!SessionStore.write(context, staleGenerationOne),
+                "un snapshot retardé d'une génération ancienne ne peut pas remplacer la nouvelle");
+        ok(SessionStore.read(context).safeLengthBytes == 1_024L
+                        && "segment-2.gpx".equals(SessionStore.read(context).file),
+                "le checkpoint du segment 2 reste la source de vérité");
 
         section("Récupération du backup après coupure pendant AtomicFile");
         SessionJournal beforeCrash = SessionJournal.of("backup-session", true, 10L, 20L,
