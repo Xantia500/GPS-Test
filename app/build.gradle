@@ -4,7 +4,10 @@ plugins {
 
 android {
     namespace 'com.example.gpstest'
-    compileSdk 36
+    // Some resolved AndroidX AARs require API 37.2 at compile time.
+    // This does not opt the app into Android 17 runtime behavior: targetSdk stays 36.
+    compileSdk 37
+    compileSdkMinor 2
 
     defaultConfig {
         applicationId "com.example.gpstest"

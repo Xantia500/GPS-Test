@@ -30,8 +30,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android 16 SDK and Build Tools 36.0.0
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android SDK Platform 37.2 and Build Tools 36.0.0
+        run: sdkmanager --install "platforms;android-37.2" "build-tools;36.0.0"
 
       - name: Static project audit
         run: python3 tools/verify_android_project.py

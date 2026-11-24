@@ -17,7 +17,7 @@ GRADLE_VERSION="$(gradle --version | awk '/^Gradle / {print $2; exit}')"
 
 SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 [[ -n "$SDK_ROOT" && -d "$SDK_ROOT" ]] || fail "ANDROID_SDK_ROOT/ANDROID_HOME absent ou invalide."
-[[ -f "$SDK_ROOT/platforms/android-36/android.jar" ]] || fail "Android SDK Platform 36 absent : sdkmanager 'platforms;android-36'."
+[[ -f "$SDK_ROOT/platforms/android-37.2/android.jar" ]] || fail "Android SDK Platform 37.2 absent : sdkmanager 'platforms;android-37.2'."
 [[ -d "$SDK_ROOT/build-tools/36.0.0" ]] || fail "Android Build Tools 36.0.0 absents : sdkmanager 'build-tools;36.0.0'."
 
 python3 tools/verify_android_project.py

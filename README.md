@@ -41,14 +41,14 @@ Le relief ombré n'est pas proposé faute de données DEM associées. La validat
 
 ### Préparer la compilation Android (LOT 8A / 8B)
 
-La dernière vérification et mise à niveau des versions (24/11/2026) est documentée dans `docs/LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md`.
+La dernière vérification et mise à niveau des versions (24/11/2026) est documentée dans `docs/LOT_8B_MISE_A_JOUR_OUTILLAGE_ANDROID_2026-11-24.md` et le correctif compile SDK 37.2 dans `docs/LOT_8B_COMPILESDK_37_2.md`.
 
-La configuration du projet est épinglée sur **AGP 9.5.2 / Gradle 9.9.2 / JDK 17+ / SDK Platform 36 / Build Tools 36.0.0**. `minSdk 24` est cohérent avec WorkManager 2.12.0.
+La configuration du projet est épinglée sur **AGP 9.5.2 / Gradle 9.9.2 / JDK 17+ / SDK Platform 37.2 / Build Tools 36.0.0**. `compileSdk 37` + `compileSdkMinor 2` répond aux métadonnées AAR ; `targetSdk 36` et `minSdk 24` restent inchangés.
 
 Sur une machine Android :
 
 ```bash
-sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+sdkmanager "platforms;android-37.2" "build-tools;36.0.0" "platform-tools"
 bash tools/check_android_build_environment.sh
 ```
 

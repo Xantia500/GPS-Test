@@ -138,7 +138,8 @@ root_build = (ROOT / "build.gradle").read_text(encoding="utf-8")
 app_build = (APP / "build.gradle").read_text(encoding="utf-8")
 require("com.android.application' version '9.5.2'" in root_build,
         "AGP attendu 9.5.2 (mettre à jour explicitement ce contrôle lors d'une future migration)")
-require(bool(re.search(r"compileSdk\s+36\b", app_build)), "compileSdk doit être 36")
+require(bool(re.search(r"compileSdk\s+37\b", app_build)), "compileSdk doit être 37")
+require(bool(re.search(r"compileSdkMinor\s+2\b", app_build)), "compileSdkMinor doit être 2 (plateforme Android 37.2)")
 require(bool(re.search(r"minSdk\s+24\b", app_build)), "minSdk doit être 24")
 require(bool(re.search(r"targetSdk\s+36\b", app_build)), "targetSdk doit être 36")
 require("JavaVersion.VERSION_17" in app_build, "La compatibilité du bytecode Java 17 doit être déclarée")
@@ -155,6 +156,8 @@ require("org.mapsforge:mapsforge-map-android:0.25.0" in app_build,
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 require("gradle-version: '9.9.2'" in workflow,
         "La CI doit installer Gradle 9.9.2")
+require('"platforms;android-37.2"' in workflow,
+        "La CI doit installer Android SDK Platform 37.2")
 require('"build-tools;36.0.0"' in workflow,
         "La CI doit installer Android Build Tools 36.0.0")
 require((ROOT / "tools/run_jvm_tests.py").is_file()
@@ -256,6 +259,6 @@ if errors:
         print("NOTE : " + note)
     sys.exit(1)
 
-print(f"OK — {len(xml_files)} XML analysés ; {len(java_files)} sources Java auditées ; ressources R cohérentes ; manifeste/permissions/FGS cohérents ; SDK 36/min 24 ; Edge-to-Edge présent.")
+print(f"OK — {len(xml_files)} XML analysés ; {len(java_files)} sources Java auditées ; ressources R cohérentes ; manifeste/permissions/FGS cohérents ; SDK 37.2/target 36/min 24 ; Edge-to-Edge présent.")
 for note in notes:
     print("NOTE : " + note)

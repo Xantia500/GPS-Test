@@ -66,3 +66,20 @@ Le module applicatif est exclusivement Java/XML et son script Gradle ne contient
 ## Correctif Java complémentaire — capture lambda
 
 Le journal de compilation complémentaire a révélé une erreur dans `TrackingService.java` autour de `fullTracking` : cette variable locale est réaffectée pendant le décodage GNSS et ne peut donc pas être capturée par la lambda UI. La livraison combinée prépare maintenant `final String fullTrackingStatus` avant `ui.post()` et ne capture plus que cette chaîne immuable. Le vérificateur statique inclut un garde de non-régression dédié. Voir `LOT_8B_CORRECTIF_LAMBDA.md`.
+
+
+## Correctif complémentaire — Android SDK Platform 37.2 (24/11/2026)
+
+La première compilation réelle sur GitHub Actions a dépassé la compilation Java et échoue à `:app:checkDebugAarMetadata`. Le journal fourni indique que les dépendances résolues exigent un `compileSdk` au moins égal à **37.2**, alors que le module était encore configuré sur API 36. L'extrait transmis ne contient pas le nom précis de l'AAR fautif ; il serait donc hasardeux d'en désigner une.
+
+La configuration est maintenant :
+
+- `compileSdk 37` et `compileSdkMinor 2` (Android SDK Platform 37.2) ;
+- `targetSdk 36` inchangé : aucune activation automatique des nouveaux comportements runtime d'Android 17 ;
+- `minSdk 24` inchangé ;
+- AGP 9.5.2 et Gradle 9.9.2 conservés ;
+- Build Tools 36.0.0 conservés : l'erreur concerne le niveau de compilation du SDK, pas les outils de build.
+
+Le workflow installe désormais `platforms;android-37.2`. Le contrôle statique et le script local vérifient aussi cette plateforme. AGP 9.5.2 dépasse le minimum AGP 9.4.0 documenté pour l'API 37.2 ; la propriété `compileSdkMinor` est présente dans la DSL Android Gradle Plugin.
+
+La mise à jour est préparée mais doit encore être confirmée par une nouvelle exécution GitHub Actions ; aucune réussite `assembleDebug`/Lint n'est revendiquée à ce stade.
