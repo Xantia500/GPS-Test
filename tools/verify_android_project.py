@@ -268,7 +268,7 @@ require("osmdroid" not in app_build.lower(), "Dépendance osmdroid réintroduite
 wrapper_props = ROOT / "gradle/wrapper/gradle-wrapper.properties"
 wrapper_jar = ROOT / "gradle/wrapper/gradle-wrapper.jar"
 if not (wrapper_props.exists() and wrapper_jar.exists()):
-    notes.append("Gradle Wrapper absent : la CI épingle Gradle 9.9.2 ; générer le wrapper avec tools/generate_gradle_wrapper.sh sur une machine équipée.")
+    notes.append("Gradle Wrapper non encore versionné : le workflow le génère avec Gradle 9.9.2, le vérifie et publie gradle-wrapper-bootstrap pour ajout au dépôt.")
 
 if errors:
     print(f"ÉCHEC — {len(errors)} problème(s), {len(xml_files)} XML analysés, {len(java_files)} Java examinés")

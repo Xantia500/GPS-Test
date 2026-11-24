@@ -33,6 +33,19 @@ jobs:
       - name: Install Android SDK Platform 37.2 and Build Tools 36.0.0
         run: sdkmanager --install "platforms;android-37.2" "build-tools;36.0.0"
 
+      # Bootstrap the wrapper from the pinned Gradle installation. The files
+      # are uploaded below so they can be committed to the repository. Once
+      # committed, this bootstrap step can be removed and CI can call ./gradlew.
+      - name: Generate pinned Gradle Wrapper
+        run: >-
+          gradle --no-daemon wrapper
+          --gradle-version 9.9.2
+          --distribution-type bin
+          --gradle-distribution-sha256-sum 971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b
+
+      - name: Verify generated Gradle Wrapper
+        run: ./gradlew --no-daemon --version
+
       - name: Static project audit
         run: python3 tools/verify_android_project.py
 
@@ -43,10 +56,25 @@ jobs:
         run: bash tools/run_jvm_tests.sh
 
       - name: Assemble debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
       - name: Run Android Lint
-        run: gradle --no-daemon --stacktrace :app:lintDebug
+        run: ./gradlew --no-daemon --stacktrace :app:lintDebug
+
+      # The generated wrapper is a bootstrap artifact until its files are
+      # committed to the repository. Keep the artifact short-lived.
+      - name: Upload Gradle Wrapper bootstrap files
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-wrapper-bootstrap
+          path: |
+            gradlew
+            gradlew.bat
+            gradle/wrapper/gradle-wrapper.jar
+            gradle/wrapper/gradle-wrapper.properties
+          if-no-files-found: warn
+          retention-days: 14
 
       # Keep diagnostics and the APK available even when Android Lint fails.
       - name: Upload debug APK
@@ -56,6 +84,7 @@ jobs:
           name: gps-test-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload Android Lint reports
         if: always()
@@ -67,3 +96,4 @@ jobs:
             app/build/reports/lint-results-debug.sarif
             app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
           if-no-files-found: warn
+          retention-days: 14

@@ -1,4 +1,6 @@
-# GPS Test — v5.14 : Java + XML, sans Compose
+# GPS Test — Java + XML, sans Compose
+
+> **Version à harmoniser avant diffusion :** le numéro `v5.14` présent dans l'historique du README n'est pas cohérent avec `versionName = "1.0"` et `versionCode = 1` dans `app/build.gradle`. Ne pas interpréter le numéro historique du README comme la version installable actuelle.
 
 Application de test GNSS complète : position, satellites multi-constellations **avec bandes L1/L5**, DOP, datum, boussole, carte du ciel, trace GPX, et une page expert pour les mesures brutes.
 
@@ -10,22 +12,22 @@ Application de test GNSS complète : position, satellites multi-constellations *
 
 ## 1. État réel du projet (transparence)
 
-### Dernière vérification automatisée disponible (LOT 8B — revue statique pré-compilation)
+### État vérifié — 24 novembre 2026 (LOT 8B)
 
-| Vérification | Résultat |
+| Vérification | Résultat / niveau de preuve |
 |---|---|
-| Suites JVM | **38 / 38** |
-| Assertions | **1 288 réussies, 0 échec** |
-| XML du manifeste et des ressources | **17 analysés, 0 erreur** |
-| Contrat hors ligne (sources actives + Gradle) | **98 fichiers analysés, aucun moteur de tuiles raster/osmdroid** |
+| Suites JVM | **38 / 38**, relancées sur l'archive source consolidée |
+| Assertions JVM | **1 289 réussies, 0 échec** après fiabilisation du test de barrière FIFO dans `GnssEventPipelineTest` |
+| XML du manifeste et des ressources | **17 analysés, 0 erreur** par le contrôle statique fourni |
+| Contrat hors ligne (sources actives + Gradle) | **98 fichiers analysés, aucun moteur de tuiles raster/osmdroid** détecté |
 | Sources Java Android auditées | **80** |
-| Génération `R.java` | **162 IDs, 213 chaînes, 7 layouts, sans erreur** |
-| Compatibilité callbacks GNSS | **LocationListener API 24–29 et jetons de génération contrôlés** |
-| Revue de compilation Java | **2 conversions float → int corrigées** dans `MapsforgeMapRenderer`; appels vérifiés dans la passe de diagnostic avec stubs |
-| Signatures des stubs JVM | **LocationManager / Handler alignés** sur les surcharges API 24 et API 31 utilisées |
-| Compilation Gradle / APK | **Non réalisée** : Gradle absent ; SDK Android absent ; CI configurée, pas encore exécutée |
+| Génération `R.java` | **162 IDs, 213 chaînes, 7 layouts**, génération sans erreur |
+| Compatibilité callbacks GNSS | Contrôles `LocationListener` API 24–29 et jetons de génération présents |
+| Compilation Android | `compileDebugJavaWithJavac` et `assembleDebug` **réussis dans les journaux GitHub Actions communiqués** |
+| Android Lint | Après corrections API 31 et API 33, **succès rapporté par l'utilisateur** ; numéro du run, SHA et rapport Lint final restent à archiver |
+| Validation sur appareil | **Non réalisée / non documentée ici** ; ne pas assimiler une CI verte à un essai GNSS réel |
 
-Les 38 suites JVM ont été compilées ensemble puis exécutées individuellement dans des processus séparés. Le lanceur `tools/run_jvm_tests.sh` a terminé avec un code de sortie nul et un bilan agrégé de 1 288 assertions. Ces tests vérifient les parties Java autonomes ; ils **ne remplacent pas** une compilation Android complète, un émulateur ou un essai GNSS/cartographique sur téléphone.
+Les 38 suites JVM sont compilées ensemble puis exécutées individuellement dans des processus séparés. Le test du pipeline GNSS utilise maintenant une barrière FIFO : le compteur `completed` est lu depuis un événement placé après les callbacks à vérifier, et non immédiatement après un signal émis à l'intérieur du callback. Ces tests vérifient les parties Java autonomes ; ils **ne remplacent pas** une compilation Android complète, un émulateur ou un essai GNSS/cartographique sur téléphone.
 
 ### Cartographie locale — lots 7A à 7G
 
@@ -54,13 +56,13 @@ sdkmanager "platforms;android-37.2" "build-tools;36.0.0" "platform-tools"
 bash tools/check_android_build_environment.sh
 ```
 
-Une CI Android est fournie dans `.github/workflows/android-build.yml`. Elle lance les contrôles statiques, les tests JVM, `assembleDebug` et Android Lint, puis publie l'APK comme artefact si tout réussit. Elle n'a pas encore été exécutée depuis ce workspace.
+La CI Android de `.github/workflows/android-build.yml` a déjà été exécutée : les journaux communiqués montrent une compilation Java Android et la génération d'un APK Debug réussies. Après les corrections de compatibilité API 31 et API 33, le succès de Lint a été rapporté par l'utilisateur. Le run final (numéro, SHA de commit et rapports post-correctifs) doit encore être archivé dans la documentation du dépôt.
 
-Le projet ne contient pas encore de Gradle Wrapper : une machine équipée de Gradle 9.9.2 peut générer les quatre fichiers nécessaires avec `bash tools/generate_gradle_wrapper.sh`.
+Le Gradle Wrapper n'est pas encore versionné dans cette archive. Pour supprimer la dépendance à une installation Gradle locale, le workflow génère désormais un Wrapper Gradle 9.9.2 épinglé, vérifie son lancement, puis publie temporairement les quatre fichiers dans l'artefact `gradle-wrapper-bootstrap`. Après le premier run de ce workflow, télécharger cet artefact, placer `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar` et `gradle/wrapper/gradle-wrapper.properties` à la racine du dépôt, puis les committer. Une fois le Wrapper versionné, le bootstrap de génération pourra être retiré et la CI utilisera directement `./gradlew`.
 
-### ⚠️ À valider sur votre machine
+### ⚠️ À valider avant diffusion
 
-La compilation Gradle et le comportement sur téléphone restent les validations indispensables. Aucun APK ne doit être considéré comme validé à ce stade. Détails : `docs/LOT_8A_AUDIT_ANDROID.md` et `docs/LOT_8B_PREMIERE_CORRECTION_COMPILATION.md`.
+Un APK **Debug** a été généré par GitHub Actions, mais cela ne valide ni son comportement sur téléphone ni une version **Release**. Les essais GNSS prolongés, les vrais fichiers cartographiques, la signature Release et les validations de confidentialité restent à faire. Détails : `docs/LOT_8A_AUDIT_ANDROID.md`, `docs/LOT_8B_PREMIERE_CORRECTION_COMPILATION.md` et `docs/LOT_8B_F_CLOTURE.md`.
 
 ---
 
