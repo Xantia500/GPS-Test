@@ -60,6 +60,17 @@ La CI Android de `.github/workflows/android-build.yml` a déjà été exécutée
 
 Le Gradle Wrapper n'est pas encore versionné dans cette archive. Pour supprimer la dépendance à une installation Gradle locale, le workflow génère désormais un Wrapper Gradle 9.9.2 épinglé, vérifie son lancement, puis publie temporairement les quatre fichiers dans l'artefact `gradle-wrapper-bootstrap`. Après le premier run de ce workflow, télécharger cet artefact, placer `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar` et `gradle/wrapper/gradle-wrapper.properties` à la racine du dépôt, puis les committer. Une fois le Wrapper versionné, le bootstrap de génération pourra être retiré et la CI utilisera directement `./gradlew`.
 
+### Travaux en cours — LOT 8C-R1 (journal de session durable)
+
+Une première étape de durcissement est préparée dans `docs/LOT_8C_R1_JOURNAL_DURABLE.md` : journal interne privé, écriture `AtomicFile`, migration legacy, UUID de session, lecture non destructive, acquittement durable de la notice, quarantaine d'un journal illisible et limites de taille/noms de fichier.
+
+- Validation locale du snapshot R1 : **39 suites JVM / 1 345 assertions / 0 échec**.
+- Contrôle statique : **17 XML / 80 sources Java**, OK ; contrôle cartographique hors ligne : **98 fichiers**, OK ; workflow YAML valide.
+- **Ce snapshot R1 n'a pas encore été compilé contre le SDK Android ni exécuté sur GitHub Actions.** Ne pas confondre ces résultats JVM avec une validation Android.
+- Le checkpoint GPX réel et la réparation du XML après crash ne sont pas encore implémentés : ils sont prévus dans le LOT 8C-R2. Les tâches persistantes seront traitées en R3.
+
+Le commit R1 doit être vérifié par GitHub Actions avant d'engager le lot suivant.
+
 ### ⚠️ À valider avant diffusion
 
 Un APK **Debug** a été généré par GitHub Actions, mais cela ne valide ni son comportement sur téléphone ni une version **Release**. Les essais GNSS prolongés, les vrais fichiers cartographiques, la signature Release et les validations de confidentialité restent à faire. Détails : `docs/LOT_8A_AUDIT_ANDROID.md`, `docs/LOT_8B_PREMIERE_CORRECTION_COMPILATION.md` et `docs/LOT_8B_F_CLOTURE.md`.

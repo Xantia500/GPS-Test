@@ -1,77 +1,284 @@
 package com.example.gpstest;
 
 import android.content.Context;
+import android.util.AtomicFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.InputStreamReader;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Accès DISQUE au journal de session.
+ * Persistance atomique du journal de session.
  *
- * POURQUOI CETTE CLASSE EXISTE, alors que SessionJournal sait déjà sérialiser :
- *   - SessionJournal est PUR (aucun Android), donc testable hors appareil ;
- *   - le format et la formulation y vivent, et sont testés ;
- *   - ici, uniquement l'entrée/sortie de fichier, qui a besoin d'un Context.
- *
- * Et surtout, cette classe est appelée depuis DEUX endroits :
- *   - MainActivity.onCreate() : pour afficher la notice dès l'ouverture de
- *     l'app (c'est là que l'utilisateur regarde, pas quand il appuie sur
- *     DÉMARRER) ;
- *   - TrackingService.onCreate() : pour ne pas perdre l'information si
- *     l'activité n'a jamais été ouverte.
- * La première version ne le faisait que dans le service : la notice
- * n'apparaissait donc qu'au moment où l'utilisateur relançait une session,
- * c'est-à-dire trop tard pour être utile.
+ * Source de vérité : stockage interne privé (getFilesDir), indépendant du
+ * volume externe qui contient les GPX. L'ancien emplacement externe est lu
+ * puis migré une seule fois. Toutes les opérations sont sérialisées dans le
+ * processus ; AtomicFile protège le remplacement contre une écriture coupée.
  */
 public final class SessionStore {
+
+    private static final Object LOCK = new Object();
+    /** Le journal ne contient que quelques champs : toute taille supérieure est suspecte. */
+    private static final int MAX_JOURNAL_BYTES = 16 * 1024;
 
     private SessionStore() { }
 
     private static File file(Context ctx) {
+        if (ctx == null) return null;
+        File dir = ctx.getFilesDir();
+        return dir == null ? null : new File(dir, SessionJournal.FILE_NAME);
+    }
+
+    private static File legacyFile(Context ctx) {
+        if (ctx == null) return null;
         File dir = ctx.getExternalFilesDir(null);
         return dir == null ? null : new File(dir, SessionJournal.FILE_NAME);
     }
 
-    /** Lit le journal. Renvoie null s'il n'existe pas ou est illisible. */
+    /** Lecture non destructive. Un journal corrompu n'est jamais supprimé ici. */
     public static SessionJournal read(Context ctx) {
-        File f = file(ctx);
-        if (f == null || !f.exists()) return null;
-
-        StringBuilder sb = new StringBuilder(256);
-        try (InputStreamReader r = new InputStreamReader(
-                new FileInputStream(f), StandardCharsets.UTF_8)) {
-            char[] buf = new char[512];
-            int n;
-            while ((n = r.read(buf)) > 0) sb.append(buf, 0, n);
-        } catch (Exception e) {
-            return null;   // fichier illisible : on ne prétend rien savoir
+        synchronized (LOCK) {
+            return readLocked(ctx);
         }
-        return SessionJournal.parse(sb.toString());
+    }
+
+    private static SessionJournal readLocked(Context ctx) {
+        File current = file(ctx);
+        if (current == null) return null;
+        File backup = new File(current.getPath() + ".bak");
+        File fresh = new File(current.getPath() + ".new");
+        if (current.exists() || backup.exists()) {
+            // Si le stockage interne contient une version committée ou son
+            // backup, ne pas masquer une corruption par un ancien journal.
+            return readAtomic(current);
+        }
+        if (fresh.exists()) {
+            // .new sans base ni .bak est une première écriture interrompue :
+            // il n'a jamais été committé et peut être écarté. La source legacy
+            // reste disponible et sera migrée si elle est valide.
+            fresh.delete();
+        }
+
+        File legacy = legacyFile(ctx);
+        SessionJournal migrated = readPlain(legacy);
+        if (migrated != null && writeAtomic(current, migrated)) {
+            // La source historique n'est supprimée qu'après commit atomique.
+            if (legacy != null) legacy.delete();
+        }
+        return migrated;
+    }
+
+    private static SessionJournal readAtomic(File base) {
+        try (InputStream in = new AtomicFile(base).openRead()) {
+            return SessionJournal.parse(readUtf8(in));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static SessionJournal readPlain(File source) {
+        if (source == null || !source.isFile()) return null;
+        try (InputStream in = new FileInputStream(source)) {
+            return SessionJournal.parse(readUtf8(in));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Écriture atomique : false signifie que l'ancien journal est préservé. */
+    public static boolean write(Context ctx, SessionJournal journal) {
+        if (journal == null) return false;
+        synchronized (LOCK) {
+            File base = file(ctx);
+            if (base == null) return false;
+            SessionJournal current = readLocked(ctx);
+            if (current == null && hasUncommittedOrUnreadableState(base)) {
+                // Un nouveau START ne doit pas écraser silencieusement un journal
+                // que le parseur ne sait plus comprendre. On le met d'abord en
+                // quarantaine (copie synchronisée ou renommage rapide si énorme).
+                if (!preserveUnreadableState(base)) return false;
+            }
+            if (current != null && current.sessionId.equals(journal.sessionId)) {
+                // Toutes les écritures du service sont sérialisées sur ioMeta.
+                // La révision est donc incrémentée dans le même ordre que les
+                // snapshots ; les acquittements de notice passent par le même LOCK.
+                journal.revision = current.revision == Long.MAX_VALUE
+                        ? Long.MAX_VALUE : current.revision + 1L;
+                // Une mise à jour ultérieure du service ne doit pas faire réapparaître
+                // une notice déjà présentée pour cette même session.
+                journal.noticeShown = journal.noticeShown || current.noticeShown;
+            } else {
+                journal.revision = Math.max(1L, journal.revision);
+            }
+            if (!writeAtomic(base, journal)) return false;
+            // Le journal legacy n'est supprimé que dans readLocked(), après
+            // migration réussie. S'il coexiste avec un interne illisible, on
+            // le conserve au lieu de le détruire au premier nouveau START.
+            return true;
+        }
+    }
+
+    private static boolean writeAtomic(File base, SessionJournal journal) {
+        File dir = base.getParentFile();
+        if (dir == null || (!dir.exists() && !dir.mkdirs())) return false;
+        AtomicFile atomic = new AtomicFile(base);
+        FileOutputStream stream = null;
+        try {
+            stream = atomic.startWrite();
+            stream.write(journal.toText().getBytes(StandardCharsets.UTF_8));
+            stream.flush();
+            atomic.finishWrite(stream);
+            stream = null;
+            return true;
+        } catch (Exception e) {
+            if (stream != null) {
+                try { atomic.failWrite(stream); } catch (Exception ignored) { }
+            }
+            return false;
+        }
     }
 
     /**
-     * Lit puis SUPPRIME le journal.
-     *
-     * Supprimer après lecture est volontaire : la notice ne doit s'afficher
-     * qu'une fois. Un message qui revient à chaque ouverture devient du bruit
-     * et l'utilisateur cesse de le lire.
+     * Marque la notice comme présentée sans consommer le journal : une trace
+     * interrompue doit rester disponible pour la récupération GPX du prochain
+     * sous-lot. La comparaison d'identité protège une nouvelle session.
      */
-    public static SessionJournal consume(Context ctx) {
-        SessionJournal j = read(ctx);
-        File f = file(ctx);
-        if (f != null && f.exists()) f.delete();
-        return j;
+    public static boolean markNoticeShown(Context ctx, SessionJournal expected) {
+        if (expected == null || expected.sessionId == null || expected.sessionId.isEmpty()) return false;
+        synchronized (LOCK) {
+            SessionJournal current = readLocked(ctx);
+            if (current == null || !expected.sessionId.equals(current.sessionId)) return false;
+            if (current.noticeShown) return true;
+            current.noticeShown = true;
+            current.revision = current.revision == Long.MAX_VALUE
+                    ? Long.MAX_VALUE : current.revision + 1L;
+            return writeLocked(ctx, current);
+        }
     }
 
+    private static boolean writeLocked(Context ctx, SessionJournal journal) {
+        File base = file(ctx);
+        return base != null && writeAtomic(base, journal);
+    }
+
+    private static boolean hasUncommittedOrUnreadableState(File base) {
+        return base.exists() || new File(base.getPath() + ".bak").exists();
+    }
+
+    /** Préserve un journal illisible avant qu'un nouveau START ne le remplace. */
+    private static boolean preserveUnreadableState(File base) {
+        File backup = new File(base.getPath() + ".bak");
+        File source = base.isFile() ? base : (backup.isFile() ? backup : null);
+        if (source == null) return true;
+        File quarantine = null;
+        for (int i = 0; i < 100; i++) {
+            File candidate = new File(base.getPath() + (i == 0 ? ".corrupt" : ".corrupt-" + i));
+            if (!candidate.exists()) { quarantine = candidate; break; }
+        }
+        if (quarantine == null) return false;
+
+        // Un journal normal est minuscule : une copie synchronisée évite une
+        // fenêtre où la source disparaîtrait avant la création de la quarantaine.
+        // Pour un fichier anormalement volumineux, le renommage évite une copie
+        // potentiellement coûteuse sur le thread I/O du service.
+        if (source.length() > MAX_JOURNAL_BYTES) {
+            return source.renameTo(quarantine);
+        }
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(quarantine, false)) {
+            byte[] buffer = new byte[512];
+            int count;
+            while ((count = in.read(buffer)) > 0) out.write(buffer, 0, count);
+            out.flush();
+            out.getFD().sync();
+            return true;
+        } catch (Exception e) {
+            if (quarantine.exists()) quarantine.delete();
+            return false;
+        }
+    }
+
+    /** Efface uniquement le journal de la session attendue. */
+    public static boolean clearIfSameSession(Context ctx, String expectedSessionId) {
+        if (expectedSessionId == null || expectedSessionId.isEmpty()) return false;
+        synchronized (LOCK) {
+            SessionJournal current = readLocked(ctx);
+            if (current == null || !expectedSessionId.equals(current.sessionId)) return false;
+            deleteLocked(ctx);
+            return true;
+        }
+    }
+
+    /** Variante stricte pour les traitements différés qui portent un snapshot précis. */
+    public static boolean clearIfUnchanged(Context ctx, SessionJournal expected) {
+        if (expected == null) return false;
+        synchronized (LOCK) {
+            SessionJournal current = readLocked(ctx);
+            if (current == null
+                    || !expected.sessionId.equals(current.sessionId)
+                    || expected.revision != current.revision
+                    || expected.savedAtMs != current.savedAtMs) return false;
+            deleteLocked(ctx);
+            return true;
+        }
+    }
+
+    /** Suppression inconditionnelle réservée à un arrêt explicite, dans la FIFO du service. */
     public static void clear(Context ctx) {
-        File f = file(ctx);
-        if (f != null && f.exists()) f.delete();
+        synchronized (LOCK) {
+            deleteLocked(ctx);
+        }
+    }
+
+    private static void deleteLocked(Context ctx) {
+        File current = file(ctx);
+        if (current != null) new AtomicFile(current).delete();
+        File legacy = legacyFile(ctx);
+        if (legacy != null && legacy.exists()) legacy.delete();
+        // La suppression explicite de session efface aussi les copies de
+        // quarantaine privées associées au journal, pour ne pas les conserver
+        // indéfiniment après une demande utilisateur de terminaison.
+        if (current != null) {
+            for (int i = 0; i < 100; i++) {
+                File corrupt = new File(current.getPath()
+                        + (i == 0 ? ".corrupt" : ".corrupt-" + i));
+                if (corrupt.exists()) corrupt.delete();
+            }
+        }
+    }
+
+    /** Ancienne API conservée sans suppression : consume ne doit plus détruire l'état. */
+    @Deprecated
+    public static SessionJournal consume(Context ctx) {
+        return read(ctx);
     }
 
     public static boolean exists(Context ctx) {
-        File f = file(ctx);
-        return f != null && f.exists();
+        synchronized (LOCK) {
+            File current = file(ctx);
+            if (current != null && (current.exists()
+                    || new File(current.getPath() + ".bak").exists()
+                    || new File(current.getPath() + ".new").exists())) return true;
+            File legacy = legacyFile(ctx);
+            return legacy != null && legacy.exists();
+        }
+    }
+
+    private static String readUtf8(InputStream in) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(384);
+        byte[] buffer = new byte[512];
+        int count;
+        int total = 0;
+        while ((count = in.read(buffer)) > 0) {
+            total += count;
+            if (total > MAX_JOURNAL_BYTES) {
+                throw new java.io.IOException("Journal de session anormalement volumineux");
+            }
+            out.write(buffer, 0, count);
+        }
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }
 }

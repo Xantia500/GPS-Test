@@ -149,6 +149,8 @@ public class TrackingService extends Service {
     private BufferedWriter gpxStream = null;
     private File gpxFile = null;
     private volatile RecordingSegment activeSegment = null;
+    /** Identité unique du suivi logique courant ; change à chaque nouveau START. */
+    private volatile String sessionId = "";
     private int nextSegmentId = 0;
     private volatile int gpxPointsInSegment = 0;
 
@@ -1177,6 +1179,7 @@ public class TrackingService extends Service {
         // peut être livré au même objet Service avant onDestroy(). Une ancienne
         // valeur true ferait alors effacer le journal de la nouvelle session.
         stopRequested = false;
+        sessionId = SessionJournal.newSessionId();
         running = true;
         state.setUserWantsTracking(true);
         state.resetSession(System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime());
@@ -1629,14 +1632,17 @@ public class TrackingService extends Service {
      * savoir qu'un enregistrement a été interrompu.
      */
     private void persistSession() {
-        // Construit l'instantané ICI (thread principal, lecture coherente des
-        // champs) et n'ecrit le fichier que la-bas. Les deux files sont FIFO,
-        // donc un clearSessionJournal() programme apres gagne toujours.
-        final String text = SessionJournal.of(
-                // dirty = la session est censée être VIVANTE. En pause volontaire
-                // (économie batterie), elle ne l'est pas : un retour dans l'app
-                // ne doit pas annoncer une « interruption ».
-                !state.isSuspended(),
+        // Snapshot immuable capturé avant l'accès disque. L'identité de session
+        // permet d'écarter une écriture retardée appartenant à un ancien START.
+        final String snapshotSessionId = sessionId;
+        if (snapshotSessionId == null || snapshotSessionId.isEmpty()) return;
+        final SessionJournal journal = SessionJournal.of(
+                snapshotSessionId,
+                // Le journal reste dirty jusqu'à l'arrêt explicite qui l'efface.
+                // Ne pas le déduire de userWantsTracking : un retrait de permission
+                // met ce flag à false AVANT persistSession(), alors que la session
+                // n'a pas été terminée volontairement et doit rester récupérable.
+                true,
                 state.getSessionStartMs(),
                 System.currentTimeMillis(),
                 state.isRecording(),
@@ -1644,23 +1650,20 @@ public class TrackingService extends Service {
                 state.getTrackPoints(),
                 state.getGpxSegment(),
                 gpxPointsInSegment,
-                policy.id,
+                policy != null ? policy.id : 0,
                 gpxFile != null ? gpxFile.getName()
-                        : (state.getLastGpxFile() != null ? state.getLastGpxFile() : "")
-        ).toText();
+                        : (state.getLastGpxFile() != null ? state.getLastGpxFile() : ""),
+                0L // LOT 8C-R2 : remplacé par le dernier checkpoint flush + fd.sync.
+        );
 
-        // ioMeta et pas ioFile : le journal ne doit jamais attendre derriere
-        // une rafale d'ecritures de points GPS.
+        // Le journal est écrit en interne via AtomicFile. Il reste dans une file
+        // séparée des points GPX : il ne peut pas retarder l'acquisition. Avant
+        // l'écriture, on vérifie que le START n'a pas changé entre-temps.
         Handler meta = ioMeta;
         if (meta == null || !meta.post(() -> {
-            File dir = getExternalFilesDir(null);
-            if (dir == null) return;
-            File f = new File(dir, SessionJournal.FILE_NAME);
-            try (OutputStreamWriter w = new OutputStreamWriter(
-                    new FileOutputStream(f, false), StandardCharsets.UTF_8)) {
-                w.write(text);
-            } catch (Exception error) {
-                android.util.Log.w("TrackingService", "Écriture du journal de session impossible", error);
+            if (!snapshotSessionId.equals(sessionId)) return;
+            if (!SessionStore.write(TrackingService.this, journal)) {
+                android.util.Log.w("TrackingService", "Écriture atomique du journal de session impossible");
             }
         })) {
             android.util.Log.w("TrackingService", "Écriture du journal de session ignorée : worker indisponible");
@@ -2507,10 +2510,13 @@ public class TrackingService extends Service {
     // ==================================================================
 
     private void clearSessionJournal() {
-        // On passe par SessionStore, comme tout le reste : une seule façon
-        // d'effacer le journal, donc aucun risque de divergence de nom/chemin.
+        // L'identité capturée empêche un clear retardé d'effacer le journal
+        // d'un nouveau START dans la même instance de Service.
+        final String expectedSessionId = sessionId;
         Handler meta = ioMeta;
-        if (meta == null || !meta.post(() -> SessionStore.clear(TrackingService.this))) {
+        if (expectedSessionId == null || expectedSessionId.isEmpty()) return;
+        if (meta == null || !meta.post(() ->
+                SessionStore.clearIfSameSession(TrackingService.this, expectedSessionId))) {
             android.util.Log.w("TrackingService", "Effacement du journal non mis en file : worker indisponible");
         }
     }
@@ -2532,23 +2538,25 @@ public class TrackingService extends Service {
             // avant startForeground(), et un lancement rapide pourrait
             // sinon masquer le journal de la session morte précédente.
             SessionJournal previous = SessionStore.read(TrackingService.this);
-            if (previous == null) return;
+            if (previous == null || previous.noticeShown) return;
             String notice = previous.interruptionNotice();
             if (notice == null) return;
             ui.post(() -> {
                 // La notice concerne explicitement la session précédente.
-                // Elle reste pertinente même si le nouveau suivi a démarré
-                // entre-temps ; la garde évite seulement un doublon avec
-                // la lecture concurrente de MainActivity.
+                // Elle reste pertinente même si un nouveau suivi démarre.
                 if (state.getSessionNotice() == null) {
                     state.setSessionNotice(notice);
                     state.notifyChanged();
+                    Handler marker = ioMeta;
+                    if (marker != null) marker.post(() ->
+                            SessionStore.markNoticeShown(TrackingService.this, previous));
                 }
             });
         })) {
             android.util.Log.w("TrackingService", "Lecture du journal précédent non mise en file");
         }
-        // Ne supprime PAS ici : MainActivity consomme le journal à l'ouverture.
+        // Ne supprime PAS ici : MainActivity peut également lire et acquitter la notice,
+        // mais le journal doit rester disponible pour la récupération GPX du LOT 8C-R2.
     }
     // ==================================================================
     // Enregistrement des mesures GNSS brutes (mode Expert)

@@ -29,6 +29,9 @@ public class SessionJournalTest {
 
         ok(back != null, "analyse d'un texte valide ne renvoie pas null");
         ok(back.dirty, "dirty conservé");
+        ok(back.sessionId != null && !back.sessionId.isEmpty(), "identité de session conservée");
+        ok(back.safeLengthBytes == 0L, "absence de checkpoint représentée par zéro");
+        ok(back.revision >= 1L, "révision initialisée");
         ok(back.startMs == 1_700_000_000_000L, "startMs conservé");
         ok(back.savedAtMs == 1_700_000_600_000L, "savedAtMs conservé");
         ok(back.recording, "recording conservé");
@@ -91,8 +94,8 @@ public class SessionJournalTest {
         ok(notice.contains("trace.gpx"), "la notice nomme le fichier");
         ok(notice.contains("250"),
                 "la notice donne les points DU SEGMENT (250), pas du total (5000)");
-        ok(notice.toLowerCase().contains("lisible"),
-                "la notice promet que le fichier est lisible — c'est vrai, il est flushé");
+        ok(notice.toLowerCase().contains("vérifier"),
+                "la notice indique que la fin du fichier doit être vérifiée");
 
         // Si segmentPoints est nul mais points non nul, on retombe sur points :
         // mieux vaut un chiffre approximatif qu'aucun chiffre.
@@ -146,6 +149,48 @@ public class SessionJournalTest {
                 "expectedAlive survit à la sérialisation");
         ok(rt.interruptionNotice() == null,
                 "après relecture disque, la pause ne produit toujours pas de notice");
+
+
+        // ============================================================
+        section("FORMAT 4 : identité, révision et checkpoint sûr");
+        // ============================================================
+        SessionJournal checkpoint = SessionJournal.of("session-123", true,
+                10L, 20L, true, false, 9_000L, 4, 500L, 2,
+                "trace-reprise.gpx", 123_456L);
+        SessionJournal checkpointRoundTrip = SessionJournal.parse(checkpoint.toText());
+        ok(checkpointRoundTrip != null, "format 4 relu");
+        ok("session-123".equals(checkpointRoundTrip.sessionId), "identité stable après parsing");
+        ok(checkpointRoundTrip.safeLengthBytes == 123_456L, "offset checkpoint conservé");
+        ok(checkpointRoundTrip.segmentPoints == 500L, "compteur de segment conservé");
+        ok(!checkpointRoundTrip.noticeShown, "notice non acquittée par défaut");
+        checkpointRoundTrip.noticeShown = true;
+        ok(SessionJournal.parse(checkpointRoundTrip.toText()).noticeShown,
+                "acquittement notice sérialisé");
+        ok(SessionJournal.parse("format=999\nstart=1\n") == null,
+                "format futur inconnu refusé sans interprétation destructive");
+        SessionJournal unsafePath = SessionJournal.parse(
+                "format=4\nsessionId=safe-session\ndirty=true\nrecording=true\n"
+                        + "suspended=false\nfile=../private/secret.gpx\n");
+        ok(unsafePath != null && unsafePath.file.isEmpty(),
+                "un chemin relatif fourni dans le journal n'est jamais traité comme un nom de fichier");
+
+        SessionJournal legacy = SessionJournal.parse(
+                "format=3\nstart=100\nsavedAt=200\ndirty=true\nrecording=true\n"
+                + "suspended=false\nfile=old.gpx\nsafeLength=4096\nsegmentPoints=12\n");
+        ok(legacy != null, "journal historique format 3 lisible");
+        ok(legacy.safeLengthBytes == 4096L, "checkpoint historique préservé");
+        ok(legacy.sessionId.startsWith("legacy:"), "identité déterministe créée pour l'ancien journal");
+        ok(legacy.isUnexpectedRecordingInterruption(), "ancien journal actif reconnu comme interrompu");
+
+        // ============================================================
+        section("Pause : intention utilisateur distincte de l'acquisition attendue");
+        // ============================================================
+        SessionJournal pausedButWanted = SessionJournal.of("paused-session", true,
+                1L, 2L, true, true, 900L, 1, 300L, 2, "paused.gpx", 8_192L);
+        ok(pausedButWanted.dirty, "session logique toujours voulue pendant la pause");
+        ok(!pausedButWanted.expectedAlive, "acquisition non attendue pendant la pause");
+        ok(pausedButWanted.interruptionNotice() != null,
+                "mort du service pendant la pause signalée sans prétendre qu'un point manquait");
 
         System.out.println("\n---------------------------------------------");
         System.out.println("RESULTAT : " + pass + " reussis, " + fail + " echoues");

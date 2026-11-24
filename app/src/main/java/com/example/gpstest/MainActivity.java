@@ -274,13 +274,19 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (state.isUserWantsTracking()) return;   // session vivante
-                final SessionJournal previous = SessionStore.consume(MainActivity.this);
-                if (previous == null) return;
+                final SessionJournal previous = SessionStore.read(MainActivity.this);
+                if (previous == null || previous.noticeShown) return;
+                final String notice = previous.interruptionNotice();
+                if (notice == null) return;
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         if (state.getSessionNotice() == null) {
-                            state.setSessionNotice(previous.interruptionNotice());
+                            state.setSessionNotice(notice);
+                            // La notice est acquittée après sa mise à l'écran,
+                            // mais le journal est conservé pour la récupération GPX.
+                            new Thread(() -> SessionStore.markNoticeShown(
+                                    MainActivity.this, previous), "session-journal-ack").start();
                         }
                     }
                 });

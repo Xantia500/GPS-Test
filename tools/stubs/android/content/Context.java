@@ -9,6 +9,7 @@ public class Context {
     public static final int RECEIVER_NOT_EXPORTED = 4;
     public static final int RECEIVER_EXPORTED = 2;
     public SharedPreferences getSharedPreferences(String n, int m) { return null; }
+    public File getFilesDir() { return null; }
     public File getExternalFilesDir(String type) { return null; }
     @SuppressWarnings("unchecked")
     public <T> T getSystemService(String name) { return null; }
