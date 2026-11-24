@@ -42,12 +42,28 @@ jobs:
       - name: JVM regression tests
         run: bash tools/run_jvm_tests.sh
 
-      - name: Assemble debug APK and run Android Lint
-        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:lintDebug
+      - name: Assemble debug APK
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
 
+      - name: Run Android Lint
+        run: gradle --no-daemon --stacktrace :app:lintDebug
+
+      # Keep diagnostics and the APK available even when Android Lint fails.
       - name: Upload debug APK
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: gps-test-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Upload Android Lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-reports
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.sarif
+            app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
+          if-no-files-found: warn

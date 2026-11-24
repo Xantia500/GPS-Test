@@ -2739,7 +2739,10 @@ public class TrackingService extends Service {
         }
 
         boolean supported = true;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // GnssCapabilities.hasMeasurements() est disponible à partir de l'API 31.
+            // Android 11 (API 30) expose getGnssCapabilities(), mais pas ce getter :
+            // sur API 24–30, on laisse l'inscription du callback déterminer le support.
             try {
                 supported = locationManager.getGnssCapabilities().hasMeasurements();
                 rawMeasurementsSupportKnown = true;
@@ -2752,6 +2755,13 @@ public class TrackingService extends Service {
                 rawMeasurementsSupportKnown = false;
                 state.setRawMeasurementsSupportKnown(false);
             }
+        } else {
+            // Avant API 31, aucun contrôle public équivalent n'est disponible.
+            // Ne pas annoncer « non supporté » : tenter l'inscription ci-dessous.
+            rawMeasurementsSupportKnown = false;
+            rawMeasurementsSupported = false;
+            state.setRawMeasurementsSupportKnown(false);
+            state.setRawMeasurementsSupported(false);
         }
         if (!supported) {
             nextRawMeasurementsRetryElapsedMs = Long.MAX_VALUE;

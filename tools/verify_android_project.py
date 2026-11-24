@@ -153,6 +153,12 @@ require("androidx.work:work-runtime:2.12.0" in app_build,
         "WorkManager 2.12.0 attendu : sa minSdk 24 correspond au projet")
 require("org.mapsforge:mapsforge-map-android:0.25.0" in app_build,
         "Dépendance Mapsforge Android épinglée non trouvée")
+gitattributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+require("* text=auto eol=lf" in gitattributes,
+        "Les fins de ligne LF doivent être stabilisées par .gitattributes")
+editorconfig = (ROOT / ".editorconfig").read_text(encoding="utf-8")
+require("end_of_line = lf" in editorconfig,
+        "EditorConfig doit imposer LF aux éditeurs compatibles")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 require("gradle-version: '9.9.2'" in workflow,
         "La CI doit installer Gradle 9.9.2")
@@ -216,6 +222,12 @@ edge = (JAVA / "EdgeToEdge.java").read_text(encoding="utf-8")
 require("if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)" in tracking
         and "new android.location.LocationRequest.Builder(locationIntervalMs)" in tracking,
         "LocationRequest.Builder API 31 doit être gardé par API S")
+require(bool(re.search(
+            r"if \(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.S\) \{\s*"
+            r"// GnssCapabilities\.hasMeasurements\(\) est disponible à partir de l'API 31\."
+            r"[\s\S]*?supported = locationManager\.getGnssCapabilities\(\)\.hasMeasurements\(\);",
+            tracking)),
+        "GnssCapabilities.hasMeasurements API 31 doit être protégé par API S")
 require("if (Build.VERSION.SDK_INT >= 34)" in tracking
         and "getGnssSignalTypes()" in tracking,
         "GnssCapabilities.getGnssSignalTypes API 34 doit être gardé")

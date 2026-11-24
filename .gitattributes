@@ -1,0 +1,17 @@
+# Keep all text files LF in Git and in working trees, including on Windows.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.apk binary
+*.aar binary
+*.jar binary
+*.map binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.pdf binary
+*.jks binary
+*.keystore binary

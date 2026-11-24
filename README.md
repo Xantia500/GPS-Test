@@ -45,6 +45,8 @@ La dernière vérification et mise à niveau des versions (24/11/2026) est docum
 
 La configuration du projet est épinglée sur **AGP 9.5.2 / Gradle 9.9.2 / JDK 17+ / SDK Platform 37.2 / Build Tools 36.0.0**. `compileSdk 37` + `compileSdkMinor 2` répond aux métadonnées AAR ; `targetSdk 36` et `minSdk 24` restent inchangés.
 
+Les fins de ligne sont normalisées en LF par `.gitattributes` et `.editorconfig`, y compris lors des extractions Windows. Les fichiers binaires (cartes `.map`, APK, archives, images et clés) sont exclus de toute conversion.
+
 Sur une machine Android :
 
 ```bash
