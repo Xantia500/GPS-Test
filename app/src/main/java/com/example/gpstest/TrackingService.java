@@ -2739,7 +2739,7 @@ public class TrackingService extends Service {
                     if (recovery.isSuccess()) {
                         // Effacement conditionnel : ne peut pas supprimer le
                         // journal d'une nouvelle session déjà démarrée.
-                        SessionStore.clearIfSameSession(TrackingService.this, previous.sessionId);
+                        SessionStore.clearIfUnchanged(TrackingService.this, previous);
                     }
                     final String recoveryNotice = recovery.isSuccess()
                             ? "Trace GPX récupérée : " + recovery.recoveredFileName

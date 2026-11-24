@@ -12,6 +12,8 @@ import java.io.*;
 import java.util.Locale;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 /** Conservative GPX recovery from a synced prefix. The source is never modified. */
 public final class GpxRecovery {
@@ -77,9 +79,14 @@ public final class GpxRecovery {
             if (!isCompleteGpx(temp))
                 return fail(Status.INVALID_PREFIX, sourceName, checkpoint,
                         "Le préfixe synchronisé n'est pas un document GPX récupérable. L'original est intact.");
-            if (source.length()!=beforeLength || source.lastModified()!=beforeModified)
+            // La taille et lastModified() seuls ne détectent pas une réécriture
+            // de même longueur dans la granularité de temps du système de fichiers.
+            // Comparer les octets du préfixe évite de publier une copie hybride
+            // si un writer retardé modifie la source pendant la récupération.
+            if (!prefixContentsEqual(source, temp, checkpoint)
+                    || source.length()!=beforeLength || source.lastModified()!=beforeModified)
                 return fail(Status.SOURCE_CHANGED, sourceName, checkpoint,
-                        "Le fichier source a changé pendant la récupération. La copie temporaire a été écartée.");
+                        "Le contenu ou les métadonnées du fichier source ont changé pendant la récupération. La copie temporaire a été écartée.");
 
             long recoveredLength = temp.length();
             for (int suffix=1; suffix<=999; suffix++) {
@@ -134,6 +141,33 @@ public final class GpxRecovery {
             out.write(GpxWriter.footer().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             out.flush(); out.getFD().sync();
         }
+    }
+
+    /** Compare byte-for-byte the checkpoint prefix, without loading either file in memory. */
+    static boolean prefixContentsEqual(File source, File copy, long length) throws IOException {
+        if (source == null || copy == null || length < 0L) return false;
+        return MessageDigest.isEqual(digestPrefix(source, length), digestPrefix(copy, length));
+    }
+
+    private static byte[] digestPrefix(File file, long length) throws IOException {
+        final MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IOException("SHA-256 indisponible", impossible);
+        }
+        byte[] buffer = new byte[BUFFER];
+        long remaining = length;
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file), BUFFER)) {
+            while (remaining > 0L) {
+                int n = in.read(buffer, 0, (int) Math.min((long) buffer.length, remaining));
+                if (n < 0) throw new EOFException("Fin de fichier avant la longueur à vérifier");
+                if (n == 0) continue;
+                digest.update(buffer, 0, n);
+                remaining -= n;
+            }
+        }
+        return digest.digest();
     }
 
     /** Secure well-formed XML check; DOCTYPE and external entities are rejected. */
@@ -195,6 +229,7 @@ public final class GpxRecovery {
     private static boolean safeName(String value) {
         if (value==null) return false;
         String n=value.trim();
+        if (!value.equals(n)) return false;
         if (n.isEmpty() || n.length()>512 || ".".equals(n) || "..".equals(n)
                 || n.contains("/") || n.contains("\\") || n.contains("\n") || n.contains("\r")
                 || !n.toLowerCase(Locale.ROOT).endsWith(".gpx")) return false;

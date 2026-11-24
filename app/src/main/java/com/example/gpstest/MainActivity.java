@@ -289,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
                 if (recovery.isSuccess()) {
                     // Ne jamais effacer un journal qui aurait déjà été remplacé
                     // par une nouvelle session démarrée pendant la copie.
-                    SessionStore.clearIfSameSession(MainActivity.this, previous.sessionId);
+                    SessionStore.clearIfUnchanged(MainActivity.this, previous);
                     notice = "Trace GPX récupérée : " + recovery.recoveredFileName
                             + "\nLe fichier original " + previous.file + " est conservé. ";
                 } else {

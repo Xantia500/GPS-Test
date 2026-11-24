@@ -32,6 +32,9 @@ def main() -> int:
 
     require("copyPrefix(source, temp, checkpoint)" in recovery,
             "la récupération copie le préfixe exact du checkpoint")
+    require("prefixContentsEqual(source, temp, checkpoint)" in recovery
+            and "MessageDigest.getInstance(\"SHA-256\")" in recovery,
+            "le contenu source est comparé au préfixe copié, même à taille et date identiques")
     require("remaining > 0" in recovery and "raw.getFD().sync()" in recovery,
             "la copie de récupération est complète puis synchronisée")
     require("source.getCanonicalFile()" in recovery and "canonicalSource.getParentFile()" in recovery,
@@ -51,19 +54,24 @@ def main() -> int:
             "la copie est publiée séparément et les reprises identiques sont idempotentes")
     require("GpxRecovery.recover(getExternalFilesDir(null)" in activity,
             "MainActivity déclenche la récupération sur son worker de démarrage")
-    require("SessionStore.clearIfSameSession(MainActivity.this, previous.sessionId)" in activity,
-            "le journal est effacé uniquement si l'identité de session n'a pas changé")
+    require("SessionStore.clearIfUnchanged(MainActivity.this, previous)" in activity,
+            "MainActivity acquitte uniquement le snapshot exact qui a été récupéré")
     require('new Thread(() -> {' in service and '"gpx-session-recovery"' in service
             and "GpxRecovery.recover(" in service,
             "le service possède un repli de récupération asynchrone")
-    require("SessionStore.clearIfSameSession(TrackingService.this, previous.sessionId)" in service,
-            "le service ne peut pas effacer le journal d'une nouvelle session")
+    require("SessionStore.clearIfUnchanged(TrackingService.this, previous)" in service,
+            "le service acquitte uniquement le snapshot exact qui a été récupéré")
     require("rejectsAMidPointPrefixWithoutChangingTheSource" in tests
+            and "rejectsCheckpointCutInsideUtf8Sequence" in tests
+            and "concurrentRecoveryCallsPublishOnlyOneCopy" in tests
+            and "detectsSameLengthSourceMutationWithPrefixDigest" in tests
             and "reusesAnIdenticalRecoveredCopyAndNeverOverwritesAConflict" in tests,
-            "les tests couvrent les coupures au milieu d'un point et les collisions de noms")
+            "les tests couvrent les coupures XML/UTF-8, modifications de source, concurrence et collisions")
+    require("SessionStore.clearIfUnchanged(context, recoveryRead)" in read(ROOT / "tests/SessionStoreTest.java"),
+            "un checkpoint plus récent de la même session ne peut pas être effacé")
     require("Verify interrupted GPX recovery contract" in workflow,
             "GitHub Actions exécute le contrôle structurel de récupération")
-    print("OK : invariants structurels du LOT 8C-R2B.3 vérifiés.")
+    print("OK : invariants structurels du LOT 8C-R2B.4 vérifiés.")
     return 0
 
 

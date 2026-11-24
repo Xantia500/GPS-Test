@@ -147,6 +147,26 @@ public final class SessionStoreTest {
         ok(!SessionStore.clearIfUnchanged(context, acknowledged),
                 "snapshot/révision ancien ne peut pas supprimer le journal courant");
 
+        section("Une nouvelle révision de la même session ne doit pas être effacée");
+        SessionJournal recoverSnapshot = SessionJournal.of("same-session", true,
+                700L, 800L, true, false, 10L, 2, 10L, 0, "same.gpx", 4_096L, 2L);
+        ok(SessionStore.write(context, recoverSnapshot),
+                "snapshot de session à récupérer écrit");
+        SessionJournal recoveryRead = SessionStore.read(context);
+        SessionJournal laterCheckpoint = SessionJournal.of("same-session", true,
+                700L, 900L, true, false, 12L, 2, 12L, 0, "same.gpx", 8_192L, 2L);
+        ok(SessionStore.write(context, laterCheckpoint),
+                "nouveau checkpoint de la même session écrit pendant une opération retardée");
+        ok(!SessionStore.clearIfUnchanged(context, recoveryRead),
+                "l'acquittement d'une ancienne révision ne peut pas effacer la même session actualisée");
+        SessionJournal stillCurrent = SessionStore.read(context);
+        ok(stillCurrent != null && stillCurrent.safeLengthBytes == 8_192L,
+                "le checkpoint plus récent reste présent après le refus d'acquittement");
+        ok(SessionStore.clearIfUnchanged(context, stillCurrent),
+                "seul le snapshot courant exact peut être acquitté");
+        ok(SessionStore.read(context) == null,
+                "le journal exact est supprimé après son acquittement");
+
         section("Migration du journal historique externe");
         SessionStore.clear(context);
         File legacy = new File(context.getExternalFilesDir(null), SessionJournal.FILE_NAME);

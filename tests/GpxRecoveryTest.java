@@ -16,6 +16,10 @@ public final class GpxRecoveryTest {
         rejectsUnsafeNamesAndNonGpxDocuments();
         rejectsDoctypeAndExternalEntities();
         rejectsAMidPointPrefixWithoutChangingTheSource();
+        rejectsCheckpointCutInsideUtf8Sequence();
+        rejectsDocumentsWithoutTrackSegmentsAndCleansTemporaryFiles();
+        detectsSameLengthSourceMutationWithPrefixDigest();
+        concurrentRecoveryCallsPublishOnlyOneCopy();
         reusesAnIdenticalRecoveredCopyAndNeverOverwritesAConflict();
         System.out.printf("GpxRecoveryTest : %d réussis, 0 échoués%n", passed);
         if (failed > 0) System.exit(1);
@@ -72,6 +76,8 @@ public final class GpxRecoveryTest {
         File dir = Files.createTempDirectory("gpstest-recovery-invalid-").toFile();
         check(GpxRecovery.recover(dir, "../private.gpx", 12).status == GpxRecovery.Status.INVALID_ARGUMENT,
                 "un chemin traversant le dossier est refusé");
+        check(GpxRecovery.recover(dir, " spaced.gpx", 12).status == GpxRecovery.Status.INVALID_ARGUMENT,
+                "un nom de fichier avec espaces de bord est refusé plutôt que normalisé implicitement");
         check(GpxRecovery.recover(dir, "trace.txt", 12).status == GpxRecovery.Status.INVALID_ARGUMENT,
                 "une extension différente de GPX est refusée");
         String bad = "<?xml version=\"1.0\"?><gpx version=\"1.1\" xmlns=\"urn:wrong\"><trk/></gpx>";
@@ -116,6 +122,119 @@ public final class GpxRecoveryTest {
         cleanup(dir);
     }
 
+
+    private static void rejectsCheckpointCutInsideUtf8Sequence() throws Exception {
+        File dir = Files.createTempDirectory("gpstest-recovery-utf8-").toFile();
+        String name = "utf8-cut.gpx";
+        String prefix = validPrefix(GpxWriter.Version.V11);
+        byte[] all = bytes(prefix + GpxWriter.footer());
+        byte[] character = bytes("é");
+        int at = indexOf(all, character);
+        check(at >= 0, "le scénario contient un caractère UTF-8 multioctet");
+        if (at >= 0) {
+            byte[] original = all.clone();
+            File source = write(dir, name, original);
+            long checkpoint = at + 1L; // premier octet du caractère, séquence coupée
+            GpxRecovery.Result result = GpxRecovery.recover(dir, name, checkpoint);
+            check(result.status == GpxRecovery.Status.INVALID_PREFIX,
+                    "un checkpoint au milieu d'une séquence UTF-8 est refusé");
+            check(Arrays.equals(original, Files.readAllBytes(source.toPath())),
+                    "la source reste intacte après une coupure UTF-8");
+            check(countPrefix(dir, ".gpstest-recovery-") == 0,
+                    "le temporaire est nettoyé après rejet UTF-8");
+        }
+        cleanup(dir);
+    }
+
+    private static void rejectsDocumentsWithoutTrackSegmentsAndCleansTemporaryFiles() throws Exception {
+        File dir = Files.createTempDirectory("gpstest-recovery-no-track-").toFile();
+        String noTrack = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<gpx version=\"1.1\" creator=\"test\" "
+                + "xmlns=\"http://www.topografix.com/GPX/1/1\"><metadata><name>vide</name>"
+                + "</metadata></gpx>";
+        byte[] original = bytes(noTrack);
+        File source = write(dir, "sans-trace.gpx", original);
+        GpxRecovery.Result result = GpxRecovery.recover(dir, "sans-trace.gpx", original.length);
+        check(result.status == GpxRecovery.Status.INVALID_PREFIX,
+                "un document sans trk/trkseg n'est pas présenté comme une trace récupérée");
+        check(Arrays.equals(original, Files.readAllBytes(source.toPath())),
+                "le document source sans trace reste inchangé");
+        check(countPrefix(dir, ".gpstest-recovery-") == 0,
+                "le temporaire est supprimé après rejet du document sans trace");
+        check(countSuffix(dir, "_RECUPEREE.gpx") == 0,
+                "aucune copie de récupération vide n'est publiée");
+        cleanup(dir);
+    }
+
+    private static void detectsSameLengthSourceMutationWithPrefixDigest() throws Exception {
+        File dir = Files.createTempDirectory("gpstest-recovery-digest-").toFile();
+        File source = write(dir, "source.bin", bytes("ABCDEFGHIJKLMN"));
+        File copy = write(dir, "copy.bin", bytes("ABCDEFGHIJKLMN"));
+        long timestamp = 1_700_000_000_000L;
+        source.setLastModified(timestamp);
+        copy.setLastModified(timestamp);
+        check(GpxRecovery.prefixContentsEqual(source, copy, 10L),
+                "les préfixes identiques sont reconnus");
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(source, "rw")) {
+            raf.seek(3L);
+            raf.write('x'); // même longueur, même date restaurée ensuite
+        }
+        source.setLastModified(timestamp);
+        check(source.length() == copy.length() && source.lastModified() == copy.lastModified(),
+                "le scénario simule une modification invisible aux seules métadonnées");
+        check(!GpxRecovery.prefixContentsEqual(source, copy, 10L),
+                "le digest détecte une réécriture de même longueur et même date");
+        cleanup(dir);
+    }
+
+    private static void concurrentRecoveryCallsPublishOnlyOneCopy() throws Exception {
+        File dir = Files.createTempDirectory("gpstest-recovery-concurrent-").toFile();
+        String name = "concurrent.gpx";
+        String prefix = validPrefix(GpxWriter.Version.V11);
+        byte[] original = bytes(prefix + "TAIL-NON-SYNCHRONISEE");
+        File source = write(dir, name, original);
+        final int workers = 6;
+        final java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(workers);
+        final java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        final GpxRecovery.Result[] results = new GpxRecovery.Result[workers];
+        final Throwable[] errors = new Throwable[workers];
+        Thread[] threads = new Thread[workers];
+        for (int i = 0; i < workers; i++) {
+            final int index = i;
+            threads[i] = new Thread(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    results[index] = GpxRecovery.recover(dir, name, bytes(prefix).length);
+                } catch (Throwable error) {
+                    errors[index] = error;
+                }
+            }, "gpx-recovery-test-" + i);
+            threads[i].start();
+        }
+        ready.await();
+        start.countDown();
+        for (Thread thread : threads) thread.join(10_000L);
+        boolean allDone = true;
+        for (Thread thread : threads) if (thread.isAlive()) allDone = false;
+        check(allDone, "les récupérations concurrentes terminent sans blocage");
+        boolean allSuccess = allDone;
+        String recoveredName = null;
+        for (int i = 0; i < workers; i++) {
+            if (errors[i] != null || results[i] == null || !results[i].isSuccess()) allSuccess = false;
+            else if (recoveredName == null) recoveredName = results[i].recoveredFileName;
+            else if (!recoveredName.equals(results[i].recoveredFileName)) allSuccess = false;
+        }
+        check(allSuccess, "toutes les demandes concurrentes réutilisent le même résultat réussi");
+        check(countSuffix(dir, "_RECUPEREE.gpx") == 1,
+                "une seule copie finale est publiée malgré six demandes concurrentes");
+        check(countPrefix(dir, ".gpstest-recovery-") == 0,
+                "aucun fichier temporaire ne subsiste après les demandes concurrentes");
+        check(Arrays.equals(original, Files.readAllBytes(source.toPath())),
+                "la source reste intacte malgré les demandes concurrentes");
+        cleanup(dir);
+    }
+
     private static void reusesAnIdenticalRecoveredCopyAndNeverOverwritesAConflict() throws Exception {
         File dir = Files.createTempDirectory("gpstest-recovery-idempotent-").toFile();
         String name = "idempotent.gpx";
@@ -139,6 +258,28 @@ public final class GpxRecoveryTest {
         check(Arrays.equals(sourceBytes, Files.readAllBytes(source.toPath())),
                 "la source reste intacte après les répétitions");
         cleanup(dir);
+    }
+
+    private static int indexOf(byte[] data, byte[] pattern) {
+        outer: for (int i = 0; i <= data.length - pattern.length; i++) {
+            for (int j = 0; j < pattern.length; j++) if (data[i + j] != pattern[j]) continue outer;
+            return i;
+        }
+        return -1;
+    }
+    private static int countPrefix(File dir, String prefix) {
+        File[] files = dir.listFiles();
+        if (files == null) return 0;
+        int count = 0;
+        for (File file : files) if (file.getName().startsWith(prefix)) count++;
+        return count;
+    }
+    private static int countSuffix(File dir, String suffix) {
+        File[] files = dir.listFiles();
+        if (files == null) return 0;
+        int count = 0;
+        for (File file : files) if (file.getName().endsWith(suffix)) count++;
+        return count;
     }
 
     private static String validPrefix(GpxWriter.Version version) {

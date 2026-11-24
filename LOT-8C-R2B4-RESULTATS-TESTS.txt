@@ -1,0 +1,29 @@
+GPS-Test — LOT 8C-R2B.4 — Résultats de préparation
+Date : 25 novembre 2026
+Base : projet complet R2B.3, compilation R2B.3 confirmée par l'utilisateur
+
+Tests JVM :
+- python3 tools/run_jvm_tests.py
+- 43 suites ; 1 513 assertions réussies ; 0 échec.
+- GpxRecoveryTest : 44 assertions.
+- SessionStoreTest : 60 assertions.
+
+Contrôles statiques :
+- verify_gpx_recovery.py : invariants R2B.4 réussis (SHA-256 du préfixe, acquittement snapshot exact, couverture UTF-8/concurrence/révision).
+- verify_gpx_checkpoint.py : réussi.
+- verify_gpx_async_open.py : réussi.
+- verify_android_project.py : 17 XML et 83 sources Java, cohérence manifeste/permissions/FGS/SDK/Ressources/Edge-to-Edge.
+- verify_offline_map_architecture.py : 101 fichiers ; aucun moteur/provider de tuiles raster.
+- py_compile du vérificateur : réussi.
+- Analyse YAML du workflow : valide ; jobs android et gpx-xsd présents.
+
+Non exécutés dans l'environnement de préparation :
+- Gradle :app:assembleDebug, Android Lint, tests instrumentés, ADB et appareil réel.
+- Gradle/Wrapper/SDK Android utilisable non disponibles dans l'environnement de préparation.
+- La compilation R2B.4 doit donc être confirmée dans Android Studio. La compilation R2B.3 a été signalée parfaite par l'utilisateur.
+
+Reconstruction indépendante : archive des fichiers à remplacer appliquée sur une copie propre R2B.3 ; 43 suites / 1 513 assertions et tous les audits structurels repassés.
+
+Modifications R2B.4 : GpxRecovery.java, MainActivity.java, TrackingService.java,
+tests/GpxRecoveryTest.java, tests/SessionStoreTest.java, tools/verify_gpx_recovery.py.
+Aucun fichier GitHub modifié ; aucun patch Git requis.
