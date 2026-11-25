@@ -1475,3 +1475,20 @@ La lecture du registre et les contrôles locaux sont effectués sur un executor 
 Validation de la candidate : 51 suites JVM / 1 740 assertions / 0 échec ; audit Android statique 18 XML / 97 Java ; audit cartographique 116 fichiers ; tous les contrats async-open, checkpoint, récupération, publication SAF, retry, rétention et gestion réussis. L'utilisateur compile Android localement ; aucune compilation Android n'a été lancée durant la préparation.
 
 Voir `docs/LOT-8C-R2C5-GESTION-COPIES-RECUPEREES.md` et `docs/DOSSIER-REPRISE-ULTRA-EXHAUSTIF-2026-11-25-MAJ13.md`.
+
+---
+
+## Correctif complémentaire R2C.5-AAPT.1 — 25 novembre 2026
+
+Après un échec CI de `:app:processDebugResources` sur la ressource
+`gpx_recovery_state_not_synchronized`, les apostrophes non échappées présentes
+au sein des chaînes de gestion de récupération ont été corrigées dans
+`app/src/main/res/values/strings.xml`. Le contrôle statique
+`tools/verify_android_project.py` vérifie désormais les apostrophes AAPT2 et les
+séquences Unicode `\\uXXXX` avant le build.
+
+Les tests JVM restent à 51 suites / 1 740 assertions, sans échec. Les audits
+statiques passent. La compilation Gradle après ce correctif doit être confirmée
+par l'utilisateur ; elle n'a pas été lancée pendant la préparation.
+
+Détails : `docs/LOT-8C-R2C5-CORRECTIF-AAPT-APOSTROPHES-2026-11-25.md`.

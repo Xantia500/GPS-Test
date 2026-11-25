@@ -1,0 +1,32 @@
+GPS-Test — Correctif complémentaire LOT 8C-R2C.5-AAPT.1
+Date : 25 novembre 2026
+Base : LOT 8C-R2C.5
+
+MOTIF
+- Échec CI signalé par l'utilisateur pendant :app:processDebugResources.
+- Ressource : gpx_recovery_state_not_synchronized dans app/src/main/res/values/strings.xml.
+- Javac avait terminé avec succès ; AAPT échouait au flattening des ressources.
+
+CORRECTION
+- 10 apostrophes non échappées corrigées dans 7 ressources de strings.xml.
+- La valeur gpx_recovery_state_not_synchronized est maintenant correctement échappée.
+- Aucun texte affiché ni aucune logique applicative modifiés.
+- verify_android_project.py vérifie les apostrophes AAPT2, les séquences Unicode \\uXXXX et exécute 7 auto-tests.
+
+VALIDATIONS EXÉCUTÉES
+- python3 -m py_compile tools/*.py : OK
+- verify_android_project.py : OK (18 XML, 97 Java, échappements AAPT2 valides)
+- verify_offline_map_architecture.py : OK (116 fichiers)
+- verify_gpx_async_open.py : OK
+- verify_gpx_checkpoint.py : OK
+- verify_gpx_recovery.py : OK
+- verify_gpx_recovery_publication.py : OK
+- verify_gpx_recovery_retry.py : OK
+- verify_gpx_recovery_retention.py : OK
+- verify_gpx_recovery_management.py : OK
+- Tests JVM : 51 suites, 1 740 assertions, 0 échec.
+
+NON EXÉCUTÉ
+- Aucune compilation Gradle/Android par l'assistant, conformément à la consigne utilisateur.
+- La compilation du correctif reste à confirmer par l'utilisateur.
+- Aucun test sur appareil/ADB.

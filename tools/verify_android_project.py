@@ -28,6 +28,60 @@ def require(condition, message):
 def local_name(tag):
     return tag.rsplit("}", 1)[-1]
 
+
+def validate_aapt_string_text(text):
+    """Return AAPT2-compatible string escape errors for one resource value.
+
+    AAPT2 treats unescaped apostrophes outside double-quoted spans as errors.
+    Its Gradle-facing diagnostic can be misleading; validate the source before
+    resource merging. Unicode escapes must contain exactly four hex digits.
+    """
+    errors_found = []
+    in_double_quotes = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\":
+            if i + 1 >= len(text):
+                errors_found.append("barre oblique inverse finale")
+                i += 1
+                continue
+            escaped = text[i + 1]
+            if escaped == "u":
+                digits = text[i + 2:i + 6]
+                if len(digits) != 4 or not all(c in "0123456789abcdefABCDEF" for c in digits):
+                    errors_found.append("séquence Unicode \\u invalide (quatre chiffres hexadécimaux attendus)")
+                    i += 2
+                    continue
+                codepoint = int(digits, 16)
+                if 0xD800 <= codepoint <= 0xDFFF:
+                    errors_found.append("échappement Unicode isolé dans la plage surrogate")
+                i += 6
+                continue
+            # AAPT2 consumes the next character for normal escapes, including \'.
+            i += 2
+            continue
+        if ch == '"':
+            in_double_quotes = not in_double_quotes
+        elif ch == "'" and not in_double_quotes:
+            errors_found.append("apostrophe non échappée (utiliser \\')")
+        i += 1
+    return errors_found
+
+
+# Vérifications unitaires du scanner AAPT2 : les ressources invalides doivent
+# échouer avant d'atteindre la compilation Android, et les formes valides passer.
+for sample, expected_error, label in (
+        (r"L'état", True, "apostrophe brute"),
+        (r"L\'état", False, "apostrophe échappée"),
+        ("\"l'état\"", False, "apostrophe dans une plage entre guillemets"),
+        (r"\u2014", False, "échappement Unicode valide"),
+        (r"\u20ZZ", True, "échappement Unicode non hexadécimal"),
+        (r"\u12", True, "échappement Unicode tronqué"),
+        (r"\\u20ZZ", False, "antislash littéral suivi de u")):
+    require(bool(validate_aapt_string_text(sample)) == expected_error,
+            f"Auto-test du validateur AAPT2 incorrect : {label}")
+
 # 1) XML bien formés.
 xml_files = sorted(p for p in MAIN.rglob("*.xml") if p.is_file())
 xml_trees = {}
@@ -88,6 +142,24 @@ for path in xml_files:
     for typ, name in resource_ref_pattern.findall(text):
         if typ in resources and name not in resources[typ]:
             errors.append(f"Référence XML sans ressource @{typ}/{name} dans {path.relative_to(ROOT)}")
+
+# 3b) Échappement des textes Android : détecter avant AAPT2 les apostrophes
+# non échappées et les séquences \uXXXX mal formées dans les ressources values.
+for path, root in xml_trees.items():
+    if not path.is_relative_to(RES) or not path.parent.name.startswith("values"):
+        continue
+    for node in root.iter():
+        if local_name(node.tag) not in {"string", "item"}:
+            continue
+        value = "".join(node.itertext())
+        if not value:
+            continue
+        resource_name = node.attrib.get("name", "<sans nom>")
+        for issue in validate_aapt_string_text(value):
+            errors.append(
+                f"Texte Android invalide dans {path.relative_to(ROOT)} "
+                f"(ressource {resource_name}) : {issue}"
+            )
 
 # 4) Contrôle des références R.* dans le Java.
 java_files = sorted(JAVA.glob("*.java"))
@@ -278,6 +350,6 @@ if errors:
         print("NOTE : " + note)
     sys.exit(1)
 
-print(f"OK — {len(xml_files)} XML analysés ; {len(java_files)} sources Java auditées ; ressources R cohérentes ; manifeste/permissions/FGS cohérents ; SDK 37.2/target 36/min 24 ; Edge-to-Edge présent.")
+print(f"OK — {len(xml_files)} XML analysés ; {len(java_files)} sources Java auditées ; échappements de chaînes AAPT2 valides ; ressources R cohérentes ; manifeste/permissions/FGS cohérents ; SDK 37.2/target 36/min 24 ; Edge-to-Edge présent.")
 for note in notes:
     print("NOTE : " + note)
