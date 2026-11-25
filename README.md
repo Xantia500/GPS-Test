@@ -6,15 +6,15 @@ Application de test GNSS complète : position, satellites multi-constellations *
 
 **Écrite entièrement en Java**, interface en **XML** — volontairement, pour l'apprentissage.
 
-> **État courant — 25 novembre 2026 (LOT 8C-R2C.2, candidate préparée) :** R2B.1 déplace l'ouverture GPX sur la FIFO d'écriture, R2B.2 persiste les checkpoints après `flush + FileDescriptor.sync()`, R2B.3/R2B.4 récupèrent un préfixe sûr dans une copie sans modifier l'original, R2C.1 conserve plusieurs sessions/segments dans `recovery.registry`, et R2C.2 ajoute la publication SAF transactionnelle des copies récupérées. La candidate R2C.2 passe **46 suites JVM / 1 637 assertions, 0 échec**, ainsi que les audits statiques récupération, publication SAF, checkpoint, ouverture asynchrone, Android et cartographie. La compilation Android R2C.2 reste à confirmer après remplacement. La compilation R2C.1 est confirmée par l'utilisateur. Les tests réels sur téléphone/ADB restent explicitement reportés à plus tard (voir `docs/DOSSIER-REPRISE-ULTRA-EXHAUSTIF-2026-11-25-MAJ10.md`, section 38.11). Aucun fichier GitHub n'a été modifié par l'assistant.
+> **État courant — 25 novembre 2026 (LOT 8C-R2C.3, candidate préparée) :** R2B.1 ouvre les segments GPX sur la FIFO dédiée ; R2B.2 synchronise des checkpoints durables après `flush + FileDescriptor.sync()` ; R2B.3/R2B.4 récupèrent le dernier préfixe sûr dans une copie distincte sans modifier l’original ; R2C.1 conserve plusieurs sessions/segments dans `recovery.registry` ; R2C.2 publie les copies récupérées via une transaction SAF relue et vérifiée (taille + SHA-256) ; R2C.3 ajoute une reprise WorkManager persistante, bornée à cinq tentatives automatiques, une relance utilisateur et un bandeau distinguant permissions, conflits, copies privées, publications et registres illisibles. La candidate passe **47 suites JVM / 1 663 assertions, 0 échec**, ainsi que les audits statiques Android (17 XML, 92 Java), cartographie (110 fichiers), ouverture, checkpoint, récupération, publication SAF et retry. Aucune compilation Android n’est lancée par l’assistant : l’utilisateur la réalise localement ; R2C.2 est confirmé compilé, R2C.3 est la version à compiler après remplacement. Les essais sur téléphone, ADB et fournisseurs SAF réels restent explicitement reportés (dossier MAJ11, section 39.10). Aucun fichier GitHub n’a été modifié par l’assistant.
 
 > Les mentions de `osmdroid` et Mapnik dans l'historique des premières étapes ci-dessous sont historiques. Depuis le LOT 7G, aucun moteur raster/osmdroid n'est présent dans le code Android actif ; voir la section d'état réel et `docs/LOT_7G_CARTOGRAPHIE_LOCALE_ET_PIPELINE_GNSS.md`.
 
 ---
 
-## 1. État réel du projet (transparence)
+## 1. État du projet — état courant et repères historiques (transparence)
 
-### État vérifié — 24 novembre 2026 (LOT 8B)
+### Référence historique — 24 novembre 2026 (LOT 8B, antérieure à R2A/R2B/R2C)
 
 | Vérification | Résultat / niveau de preuve |
 |---|---|
@@ -29,7 +29,7 @@ Application de test GNSS complète : position, satellites multi-constellations *
 | Android Lint | Après corrections API 31 et API 33, **succès rapporté par l'utilisateur** ; numéro du run, SHA et rapport Lint final restent à archiver |
 | Validation sur appareil | **Non réalisée / non documentée ici** ; ne pas assimiler une CI verte à un essai GNSS réel |
 
-Les 38 suites JVM sont compilées ensemble puis exécutées individuellement dans des processus séparés. Le test du pipeline GNSS utilise maintenant une barrière FIFO : le compteur `completed` est lu depuis un événement placé après les callbacks à vérifier, et non immédiatement après un signal émis à l'intérieur du callback. Ces tests vérifient les parties Java autonomes ; ils **ne remplacent pas** une compilation Android complète, un émulateur ou un essai GNSS/cartographique sur téléphone.
+Ce tableau et le paragraphe ci-dessus décrivent un état historique du LOT 8B, et non la candidate R2C.3. Pour l’état opérationnel courant, consulter le bloc d’état au début de ce README et le dossier MAJ11. À la date du LOT 8B, les 38 suites JVM étaient compilées ensemble puis exécutées individuellement dans des processus séparés. Le test du pipeline GNSS utilise maintenant une barrière FIFO : le compteur `completed` est lu depuis un événement placé après les callbacks à vérifier, et non immédiatement après un signal émis à l'intérieur du callback. Ces tests vérifient les parties Java autonomes ; ils **ne remplacent pas** une compilation Android complète, un émulateur ou un essai GNSS/cartographique sur téléphone.
 
 ### Cartographie locale — lots 7A à 7G
 

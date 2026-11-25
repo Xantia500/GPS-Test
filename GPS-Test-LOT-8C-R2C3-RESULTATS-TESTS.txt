@@ -1,0 +1,35 @@
+GPS-Test — LOT 8C-R2C.3 — résultats de contrôles
+Date : 25 novembre 2026
+Base : LOT 8C-R2C.2
+
+TESTS JVM
+47 suites exécutées
+1 663 assertions réussies
+0 échec
+
+Suites principales de ce lot :
+- GpxRecoveryRetryPolicyTest : 20 assertions
+- SessionStoreTest : 101 assertions
+
+AUDITS STATIQUES
+- verify_android_project.py : OK (17 ressources XML, 92 sources Java)
+- verify_offline_map_architecture.py : OK (110 fichiers, aucun moteur/provider raster)
+- verify_gpx_async_open.py : OK
+- verify_gpx_checkpoint.py : OK
+- verify_gpx_recovery.py : OK
+- verify_gpx_recovery_publication.py : OK
+- verify_gpx_recovery_retry.py : OK
+- python3 -m py_compile tools/*.py : OK
+- Analyse YAML de .github/workflows/android-build.yml : OK
+
+RECONSTRUCTION DE L’ARCHIVE DE REMPLACEMENT
+Effectuée avant livraison : extraction propre du projet complet R2C.2, application de l’archive des fichiers à remplacer, puis relance de l’ensemble des tests JVM et audits statiques. La reconstruction reproduit exactement 47 suites / 1 663 assertions, 0 échec ; tous les audits listés ci-dessus passent également.
+
+COMPILATION ANDROID
+Non lancée dans la préparation, conformément à la demande explicite de l’utilisateur qui prend en charge les compilations Android. R2C.2 est confirmé compilé sans erreur par l’utilisateur ; R2C.3 sera compilé par lui après remplacement.
+
+ESSAIS RÉELS
+Aucun essai téléphone, ADB, fournisseur SAF réel, cloud, SD/MTP n’a été effectué dans ce lot. La campagne reste reportée conformément à la décision utilisateur (dossier MAJ11, sections 38.11 et 39.10).
+
+CONSERVATION
+Aucune suppression automatique des copies GPX locales récupérées n’est ajoutée ; la politique de rétention est un lot ultérieur distinct.

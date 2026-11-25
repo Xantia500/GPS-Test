@@ -78,19 +78,96 @@ public final class SessionStore {
         return migrated;
     }
 
-    /** Liste durable des segments GPX interrompus. À appeler hors thread principal. */
-    public static java.util.List<SessionJournal> readRecoveries(Context ctx) {
-        synchronized (LOCK) {
-            if (ctx == null) return java.util.Collections.emptyList();
-            RecoveryRegistry registry = readRegistryLocked(ctx);
-            if (registry == null) return java.util.Collections.emptyList();
-            SessionJournal current = readLocked(ctx);
-            if (RecoveryRegistry.isEligible(current)) {
-                if (!registry.upsert(current) || !writeRegistryLocked(ctx, registry))
-                    return registry.snapshots();
-            }
-            return registry.snapshots();
+    /** Résultat diagnostiqué de la lecture du registre de récupérations. */
+    public static final class RecoveryReadResult {
+        public final java.util.List<SessionJournal> sessions;
+        public final boolean registryReadable;
+        public final boolean journalReadable;
+        public final boolean registryPresent;
+        public final boolean journalPresent;
+        public final String message;
+
+        private RecoveryReadResult(java.util.List<SessionJournal> sessions,
+                                   boolean registryReadable, boolean journalReadable,
+                                   boolean registryPresent, boolean journalPresent,
+                                   String message) {
+            this.sessions = java.util.Collections.unmodifiableList(
+                    new java.util.ArrayList<>(sessions));
+            this.registryReadable = registryReadable;
+            this.journalReadable = journalReadable;
+            this.registryPresent = registryPresent;
+            this.journalPresent = journalPresent;
+            this.message = message == null ? "" : message;
         }
+    }
+
+    /**
+     * Liste durable des segments GPX interrompus avec diagnostic des corruptions.
+     * À appeler hors thread principal. Une liste vide n'est jamais confondue
+     * avec un registre illisible si un fichier persistant existe.
+     */
+    public static RecoveryReadResult readRecoveriesDetailed(Context ctx) {
+        synchronized (LOCK) {
+            if (ctx == null) return new RecoveryReadResult(
+                    java.util.Collections.emptyList(), false, false, false, false,
+                    "Contexte de stockage indisponible.");
+
+            boolean registryPresent = hasRegistryState(ctx);
+            boolean journalPresent = hasCurrentJournalState(ctx);
+            if (registryPresent) {
+                RecoveryRegistry registry = readRegistryLocked(ctx);
+                if (registry == null) {
+                    // Diagnostiquer le journal indépendamment : une corruption
+                    // du registre multi-sessions ne rend pas automatiquement
+                    // illisible le journal courant, qui reste une source sûre.
+                    SessionJournal current = readLocked(ctx);
+                    boolean journalReadable = !journalPresent || current != null;
+                    return new RecoveryReadResult(java.util.Collections.emptyList(),
+                            false, journalReadable, true, journalPresent,
+                            "Le registre des récupérations est illisible ; son contenu est conservé.");
+                }
+                SessionJournal current = readLocked(ctx);
+                boolean journalReadable = !journalPresent || current != null;
+                if (RecoveryRegistry.isEligible(current)) {
+                    if (!registry.upsert(current) || !writeRegistryLocked(ctx, registry)) {
+                        return new RecoveryReadResult(registry.snapshots(), true, journalReadable,
+                                true, journalPresent,
+                                "Le journal courant est lisible, mais sa copie dans le registre n'a pas pu être synchronisée.");
+                    }
+                }
+                return new RecoveryReadResult(registry.snapshots(), true, journalReadable,
+                        true, journalPresent, journalReadable ? ""
+                        : "Le journal courant est illisible ; le registre des anciens segments reste préservé.");
+            }
+
+            RecoveryRegistry registry = RecoveryRegistry.empty();
+            SessionJournal current = readLocked(ctx);
+            boolean journalReadable = !journalPresent || current != null;
+            if (RecoveryRegistry.isEligible(current)) {
+                if (!registry.upsert(current) || !writeRegistryLocked(ctx, registry)) {
+                    return new RecoveryReadResult(registry.snapshots(), true, journalReadable,
+                            false, journalPresent,
+                            "Le journal courant est lisible, mais sa copie dans le registre n'a pas pu être synchronisée.");
+                }
+            }
+            return new RecoveryReadResult(registry.snapshots(), true, journalReadable,
+                    false, journalPresent, journalReadable ? ""
+                    : "Le journal courant est illisible ; le registre des anciens segments reste préservé.");
+        }
+    }
+
+    private static boolean hasCurrentJournalState(Context ctx) {
+        File current = file(ctx);
+        File legacy = legacyFile(ctx);
+        return (current != null && (current.exists()
+                || new File(current.getPath() + ".bak").exists()
+                || new File(current.getPath() + ".new").exists()))
+                || (legacy != null && legacy.exists());
+    }
+
+    /** Compatibilité : les anciens appelants reçoivent simplement les snapshots disponibles. */
+    public static java.util.List<SessionJournal> readRecoveries(Context ctx) {
+        return readRecoveriesDetailed(ctx).sessions;
     }
 
     /** Acquitte une entrée récupérée sans toucher au journal d'une autre session. */

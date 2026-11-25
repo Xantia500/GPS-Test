@@ -20,6 +20,13 @@ public final class SessionStoreTest {
         context.getFilesDir().mkdirs();
         context.getExternalFilesDir(null).mkdirs();
 
+        section("Lecture détaillée d'un état vierge");
+        SessionStore.RecoveryReadResult emptyRead = SessionStore.readRecoveriesDetailed(context);
+        ok(emptyRead.registryReadable, "registre absent interprété comme un registre vide valide");
+        ok(emptyRead.journalReadable, "journal absent interprété comme un état vide valide");
+        ok(!emptyRead.registryPresent && !emptyRead.journalPresent && emptyRead.sessions.isEmpty(),
+                "absence de fichiers distinguée d'une corruption");
+
         section("Write/read atomique en stockage interne privé");
         String id = UUID.randomUUID().toString();
         SessionJournal journal = SessionJournal.of(id, true, 100L, 200L,
@@ -267,6 +274,13 @@ public final class SessionStoreTest {
         }
         ok(SessionStore.readRecoveries(context).isEmpty(),
                 "un registre illisible ne fournit aucune entrée inventée");
+        SessionStore.RecoveryReadResult corruptRead = SessionStore.readRecoveriesDetailed(context);
+        ok(!corruptRead.registryReadable && corruptRead.registryPresent,
+                "la lecture détaillée distingue un registre présent mais illisible");
+        ok(corruptRead.journalReadable && corruptRead.journalPresent,
+                "la corruption du registre ne masque pas un journal courant encore lisible");
+        ok(!corruptRead.message.isEmpty(),
+                "la lecture détaillée fournit un diagnostic exploitable à l'interface");
         ok(registryFile.isFile() && new String(java.nio.file.Files.readAllBytes(registryFile.toPath()),
                 StandardCharsets.UTF_8).contains("registryFormat=999"),
                 "le registre corrompu reste disponible pour diagnostic");

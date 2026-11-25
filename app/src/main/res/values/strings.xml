@@ -129,6 +129,18 @@
 
     <!-- État de la publication -->
     <string name="publish_ok">Trace enregistrée dans le dossier choisi</string>
+    <string name="btn_gpx_recovery_retry">RELANCER</string>
+    <string name="gpx_recovery_retry_counts">À récupérer : %1$d · transactions SAF : %2$d</string>
+    <string name="gpx_recovery_retry_last_result">Dernière reprise : %1$d publiée(s), %2$d copie(s) privée(s), %3$d permission(s) à rétablir, %4$d intervention(s).</string>
+    <string name="gpx_recovery_retry_started">Nouvelle tentative de récupération planifiée…</string>
+    <string name="gpx_recovery_retry_running">Reprise des traces en cours…</string>
+    <string name="gpx_recovery_retry_after_tracking">Arrêtez le suivi GNSS avant de relancer les récupérations.</string>
+    <string name="gpx_recovery_retry_unavailable">Impossible de planifier la reprise. Les fichiers et journaux restent conservés.</string>
+    <string name="gpx_recovery_registry_unreadable">Le registre de récupération est illisible. Il est conservé sans modification.</string>
+    <string name="gpx_recovery_journal_unreadable">Le journal courant est illisible. Les récupérations précédentes restent conservées.</string>
+    <string name="gpx_recovery_state_not_synchronized">L'état de récupération n'a pas pu être synchronisé. Les fichiers et journaux sont conservés.</string>
+    <string name="gpx_recovery_publication_registry_unreadable">Le registre des publications SAF est illisible. Il est conservé sans modification.</string>
+    <string name="gpx_recovery_wait_tracking_stop">La reprise sera lancée après l’arrêt du suivi.</string>
     <string name="publish_wait">Copie externe à la fermeture du segment ; trace locale enregistrée en continu</string>
     <string name="publish_err">Dossier choisi inaccessible — trace conservée dans le dossier de l\'application</string>
     <!-- ══════════ v5.5 : thème ══════════ -->

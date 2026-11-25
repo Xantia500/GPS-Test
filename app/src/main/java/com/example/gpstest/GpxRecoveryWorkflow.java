@@ -12,7 +12,7 @@ public final class GpxRecoveryWorkflow {
     private GpxRecoveryWorkflow() { }
 
     public enum Status { PUBLISHED, LOCAL_ONLY, PENDING_PERMISSION, PENDING_PUBLICATION,
-        RECOVERY_FAILED, JOURNAL_NOT_ACKNOWLEDGED }
+        PUBLICATION_CONFLICT, RECOVERY_FAILED, JOURNAL_NOT_ACKNOWLEDGED }
 
     public static final class Result {
         public final Status status;
@@ -44,8 +44,14 @@ public final class GpxRecoveryWorkflow {
         }
         /** Une permission ou le transfert SAF lui-même reste nécessaire. */
         public boolean isExternalPublicationPending() {
-            return (status == Status.PENDING_PERMISSION || status == Status.PENDING_PUBLICATION)
-                    && !isPublishedExternally();
+            return (status == Status.PENDING_PERMISSION || status == Status.PENDING_PUBLICATION
+                    || status == Status.PUBLICATION_CONFLICT) && !isPublishedExternally();
+        }
+        /** Un document homonyme ou une source incohérente exige une décision, pas un retry aveugle. */
+        public boolean isPublicationInterventionRequired() {
+            return status == Status.PUBLICATION_CONFLICT
+                    || (status == Status.RECOVERY_FAILED && recovery != null
+                    && recovery.status != GpxRecovery.Status.IO_ERROR);
         }
         /** Copie privée sûre, sans publication externe aboutie ou nécessaire. */
         public boolean isRecoveredLocallyOnly() {
@@ -100,7 +106,10 @@ public final class GpxRecoveryWorkflow {
             GpxRecoveryPublisher.Result published = GpxRecoveryPublisher.publish(
                     recoveredFile, expected, tree.toString(), access, store);
             if (!published.isSuccess()) {
-                return result(Status.PENDING_PUBLICATION, recovery, "",
+                Status status = (published.status == GpxRecoveryPublisher.Status.AMBIGUOUS_DOCUMENTS
+                        || published.status == GpxRecoveryPublisher.Status.SOURCE_CHANGED)
+                        ? Status.PUBLICATION_CONFLICT : Status.PENDING_PUBLICATION;
+                return result(status, recovery, "",
                         "Copie récupérée localement ; publication SAF non acquittée : "
                                 + published.message, published);
             }

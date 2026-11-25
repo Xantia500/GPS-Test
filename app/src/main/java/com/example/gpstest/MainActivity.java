@@ -21,11 +21,14 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * L'ÉCRAN. Plus aucun capteur ici : tout le GPS est dans TrackingService.
@@ -51,9 +54,19 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar pbSnr;
     private ListView lvSatellites;
     private SkyView skyView;
-    private Button btnToggle, btnReset, btnAgps, btnGpx, btnExpert, btnSettings, btnMap;
+    private Button btnToggle, btnReset, btnAgps, btnGpx, btnExpert, btnSettings, btnMap,
+            btnRetryRecovery;
     private Spinner spDatum, spSatFilter;
-    private android.view.View rowDest, grpPosition;
+    private android.view.View rowDest, grpPosition, layoutRecoveryRetry;
+    private TextView tvRecoveryRetrySummary;
+    private final AtomicBoolean recoveryStatusLoading = new AtomicBoolean(false);
+    private volatile String recoveryWorkSummary = "";
+    private volatile int recoveryLastPublished;
+    private volatile int recoveryLastLocalOnly;
+    private volatile int recoveryWaitingPermission;
+    private volatile int recoveryIntervention;
+    private volatile boolean recoveryRecentNotice;
+    private boolean lastRecoveryTrackingWanted;
     private android.widget.TextView tvSignalNote;
     private android.widget.TextView tvHudClock, tvHudFix, tvHudSats, tvHudBattery;
     private TextView tvDest;
@@ -130,6 +143,14 @@ public class MainActivity extends AppCompatActivity {
                                 getString(R.string.dest_set_ok, Destination.humanPath(this)),
                                 Toast.LENGTH_LONG).show();
                         refreshDestSummary();
+                        recoveryWorkSummary = "";
+                        recoveryLastPublished = 0;
+                        recoveryLastLocalOnly = 0;
+                        recoveryWaitingPermission = 0;
+                        recoveryIntervention = 0;
+                        recoveryRecentNotice = false;
+                        GpxRecoveryRetryScheduler.enqueue(this);
+                        refreshRecoveryRetryStatus();
                     });
 
     /**
@@ -255,122 +276,25 @@ public class MainActivity extends AppCompatActivity {
         setupSpinners();
         setupButtons();
 
-        // NOTICE D'HISTORIQUE, affichée DÈS L'OUVERTURE de l'app.
-        //
-        // Le garde `!state.isUserWantsTracking()` n'est pas décoratif : sans
-        // lui, une session EN COURS (écran éteint puis rallumé, retour dans
-        // l'app) fait lire le journal de cette session vivante et annonce
-        // faussement une « interruption ». Un message qui crie au loup une
-        // fois est un message qu'on ignore ensuite.
-        //
-        // Si la session est vivante, le journal reste sur le disque : c'est
-        // celui de la session en cours, pas un vestige.
-        // Lecture déplacée sur un thread de fond : c'est de l'accès disque,
-        // et on est dans onCreate(), donc sur le thread principal. Un
-        // fichier de 200 octets ne coûte rien sur un stockage sain, mais sur
-        // une flash saturée ou une carte SD lente, ça peut dépasser le seuil
-        // de « skipped frames ». StrictMode le signalerait.
-        new Thread(() -> {
-            if (state.isUserWantsTracking()) return; // session actuellement vivante
-
-            // R2C : récupérer toutes les entrées persistées, pas seulement le
-            // journal courant qui peut déjà appartenir à une nouvelle session.
-            final java.util.List<SessionJournal> pending =
-                    SessionStore.readRecoveries(MainActivity.this);
-            if (!pending.isEmpty()) {
-                StringBuilder summary = new StringBuilder();
-                int recoveredCount = 0;
-                int publishedCount = 0;
-                int pendingPublicationCount = 0;
-                int pendingJournalCount = 0;
-                int failedCount = 0;
-                for (SessionJournal candidate : pending) {
-                    GpxRecoveryWorkflow.Result result = GpxRecoveryWorkflow.recoverAndPublish(
-                            MainActivity.this, getExternalFilesDir(null), candidate);
-                    if (result.isRecoveredLocally()) {
-                        recoveredCount++;
-                        if (result.isPublishedExternally()) publishedCount++;
-                        if (result.isExternalPublicationPending()) pendingPublicationCount++;
-                        if (result.isJournalAcknowledgementPending()) pendingJournalCount++;
-                        if (recoveredCount <= 5) {
-                            if (summary.length() > 0) summary.append("\n");
-                            if (result.isPublishedExternally()) {
-                                summary.append("Publiée : ").append(result.publishedDisplayName);
-                                if (result.isJournalAcknowledgementPending())
-                                    summary.append(" — journal conservé pour acquittement");
-                            } else if (result.isRecoveredLocallyOnly()) {
-                                summary.append("Récupérée localement : ").append(result.recoveredFileName);
-                                if (result.isJournalAcknowledgementPending())
-                                    summary.append(" — journal conservé pour acquittement");
-                            } else {
-                                summary.append("Publication en attente : ").append(result.recoveredFileName)
-                                        .append(" — ").append(result.message);
-                            }
-                        }
-                    } else {
-                        failedCount++;
-                        if (failedCount <= 5) {
-                            if (summary.length() > 0) summary.append("\n");
-                            summary.append("À vérifier : ").append(candidate.file)
-                                    .append(" — ").append(result.message);
-                        }
-                    }
-                }
-                if (recoveredCount > 5 || failedCount > 5) {
-                    summary.append("\nAutres éléments : ")
-                            .append(Math.max(0, recoveredCount - 5)).append(" récupérés, ")
-                            .append(Math.max(0, failedCount - 5)).append(" à vérifier.");
-                }
-                summary.insert(0, "Récupération GPX : " + recoveredCount + " copie(s) locale(s) sûre(s), "
-                        + publishedCount + " publiée(s), " + pendingPublicationCount
-                        + " publication(s) en attente, " + pendingJournalCount
-                        + " journal(aux) à acquitter, " + failedCount + " échec(s).\n");
-                final String display = summary.toString();
-                runOnUiThread(() -> {
-                    if (state.isUserWantsTracking()) return;
-                    state.setSessionNotice(display);
-                    state.notifyChanged();
-                });
-                return;
-            }
-
-            // Compatibilité des anciens journaux sans checkpoint durable :
-            // aucune réparation n'est inventée, seule la notice historique reste.
-            final SessionJournal previous = SessionStore.read(MainActivity.this);
-            if (previous == null) return;
-            final boolean interruptedRecording = previous.isUnexpectedRecordingInterruption();
-            if (!interruptedRecording && previous.noticeShown) return;
-            String notice = previous.interruptionNotice();
-            if (notice == null) return;
-            if (interruptedRecording) {
-                GpxRecoveryWorkflow.Result recovery = GpxRecoveryWorkflow.recoverAndPublish(
-                        MainActivity.this, getExternalFilesDir(null), previous);
-                notice = recovery.message + "\nLe fichier original " + previous.file + " est conservé.";
-            }
-            final String displayNotice = notice;
-            runOnUiThread(() -> {
-                if (state.isUserWantsTracking()) return;
-                if (state.getSessionNotice() == null || interruptedRecording) {
-                    state.setSessionNotice(displayNotice);
-                }
-                state.notifyChanged();
-                if (!interruptedRecording) {
-                    new Thread(() -> SessionStore.markNoticeShown(
-                            MainActivity.this, previous), "session-journal-ack").start();
-                }
-            });
-        }, "session-journal-recovery").start();
+        // La reprise est désormais portée par WorkManager : elle survit à la
+        // destruction du processus, reste bornée et n'exécute jamais d'I/O SAF
+        // sur le thread GNSS ou UI. Le bandeau permet une relance explicite.
+        observeRecoveryRetryWork();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         // L'UI s'abonne à l'état partagé à chaque fois qu'elle redevient visible.
+        lastRecoveryTrackingWanted = state.isUserWantsTracking();
         state.addListener(onStateChanged);
         // Au retour du sélecteur de dossier, l'utilisateur doit voir le
         // résultat de son choix immédiatement — onStart est le seul point
         // qui est appelé dans tous les cas de retour.
         refreshDestSummary();
+        resetRecoveryWorkSummary();
+        GpxRecoveryRetryScheduler.enqueue(this);
+        refreshRecoveryRetryStatus();
         ui.post(uiTick);
         applyStateToButtons();
         applyKeepScreenOn();
@@ -413,7 +337,17 @@ public class MainActivity extends AppCompatActivity {
     private final TrackingState.Listener onStateChanged = new TrackingState.Listener() {
         @Override
         public void onTrackingStateChanged() {
+            boolean trackingWanted = state.isUserWantsTracking();
+            boolean justStopped = lastRecoveryTrackingWanted && !trackingWanted;
+            lastRecoveryTrackingWanted = trackingWanted;
             applyStateToButtons();
+            if (justStopped) {
+                // Le worker qui aurait été déclenché pendant le suivi a pu
+                // terminer sans agir. Après l'arrêt réel du GNSS, on planifie
+                // une reprise unique, sans toucher à ioFile ni au thread UI.
+                GpxRecoveryRetryScheduler.enqueue(getApplicationContext());
+                refreshRecoveryRetryStatus();
+            }
         }
     };
 
@@ -460,6 +394,9 @@ public class MainActivity extends AppCompatActivity {
         btnGpx = findViewById(R.id.btnGpx);
         btnExpert = findViewById(R.id.btnExpert);
         btnSettings = findViewById(R.id.btnSettings);
+        btnRetryRecovery = findViewById(R.id.btnRetryRecovery);
+        layoutRecoveryRetry = findViewById(R.id.layoutRecoveryRetry);
+        tvRecoveryRetrySummary = findViewById(R.id.tvRecoveryRetrySummary);
         spDatum = findViewById(R.id.spDatum);
         spSatFilter = findViewById(R.id.spSatFilter);
         rowDest = findViewById(R.id.rowDest);
@@ -599,6 +536,143 @@ public class MainActivity extends AppCompatActivity {
 
         btnExpert.setOnClickListener(v -> openSafely(ExpertActivity.class));
         btnSettings.setOnClickListener(v -> openSafely(SettingsActivity.class));
+        btnRetryRecovery.setOnClickListener(v -> {
+            if (state.isUserWantsTracking()) {
+                Toast.makeText(this, R.string.gpx_recovery_retry_after_tracking,
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+            recoveryWorkSummary = "";
+            recoveryLastPublished = 0;
+            recoveryLastLocalOnly = 0;
+            recoveryWaitingPermission = 0;
+            recoveryIntervention = 0;
+            recoveryRecentNotice = false;
+            if (GpxRecoveryRetryScheduler.enqueue(this)) {
+                btnRetryRecovery.setEnabled(false);
+                tvRecoveryRetrySummary.setText(R.string.gpx_recovery_retry_started);
+            } else {
+                Toast.makeText(this, R.string.gpx_recovery_retry_unavailable,
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void resetRecoveryWorkSummary() {
+        recoveryWorkSummary = "";
+        recoveryLastPublished = 0;
+        recoveryLastLocalOnly = 0;
+        recoveryWaitingPermission = 0;
+        recoveryIntervention = 0;
+        recoveryRecentNotice = false;
+    }
+
+    /** Observe le travail persistant et actualise le bandeau après chaque tentative. */
+    private void observeRecoveryRetryWork() {
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfosForUniqueWorkLiveData(GpxRecoveryRetryWorker.UNIQUE_WORK_NAME)
+                .observe(this, workInfos -> {
+                    if (workInfos == null || workInfos.isEmpty()) return;
+                    WorkInfo latest = workInfos.get(workInfos.size() - 1);
+                    if (latest.getState() == WorkInfo.State.RUNNING) {
+                        recoveryWorkSummary = getString(R.string.gpx_recovery_retry_running);
+                        btnRetryRecovery.setEnabled(false);
+                        refreshRecoveryRetryStatus();
+                    } else if (latest.getState() == WorkInfo.State.ENQUEUED) {
+                        resetRecoveryWorkSummary();
+                        refreshRecoveryRetryStatus();
+                    } else if (latest.getState() == WorkInfo.State.BLOCKED) {
+                        btnRetryRecovery.setEnabled(false);
+                    } else if (latest.getState().isFinished()) {
+                        androidx.work.Data output = latest.getOutputData();
+                        String summary = output.getString(GpxRecoveryRetryWorker.KEY_SUMMARY);
+                        if (summary != null && !summary.trim().isEmpty()) recoveryWorkSummary = summary;
+                        recoveryLastPublished = output.getInt(GpxRecoveryRetryWorker.KEY_PUBLISHED, 0);
+                        recoveryLastLocalOnly = output.getInt(GpxRecoveryRetryWorker.KEY_LOCAL_ONLY, 0);
+                        recoveryWaitingPermission = output.getInt(GpxRecoveryRetryWorker.KEY_WAITING_PERMISSION, 0);
+                        recoveryIntervention = output.getInt(GpxRecoveryRetryWorker.KEY_INTERVENTION, 0);
+                        recoveryRecentNotice = output.getBoolean(GpxRecoveryRetryWorker.KEY_NOTICE, false);
+                        refreshRecoveryRetryStatus();
+                    }
+                });
+    }
+
+    /** Lecture des compteurs hors UI ; un registre illisible reste visible et n'est jamais effacé. */
+    private void refreshRecoveryRetryStatus() {
+        if (!recoveryStatusLoading.compareAndSet(false, true)) return;
+        new Thread(() -> {
+            SessionStore.RecoveryReadResult recoveries =
+                    SessionStore.readRecoveriesDetailed(MainActivity.this);
+            int pendingRecoveries = recoveries.sessions.size();
+            boolean activeTracking = state.isUserWantsTracking();
+            if (activeTracking) {
+                SessionJournal current = SessionStore.read(MainActivity.this);
+                if (current != null) {
+                    for (SessionJournal candidate : recoveries.sessions) {
+                        if (candidate.sessionId.equals(current.sessionId)
+                                && candidate.segmentGeneration == current.segmentGeneration
+                                && candidate.file.equals(current.file)) {
+                            pendingRecoveries = Math.max(0, pendingRecoveries - 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            int pendingPublications = 0;
+            boolean publicationRegistryReadable = true;
+            try {
+                pendingPublications = new RecoveryPublicationStore(MainActivity.this).read().size();
+            } catch (Exception unreadable) {
+                publicationRegistryReadable = false;
+            }
+            final int recoveryCount = pendingRecoveries;
+            final int publicationCount = pendingPublications;
+            final boolean recoveryReadable = recoveries.registryReadable && recoveries.journalReadable
+                    && (recoveries.message == null || recoveries.message.isEmpty());
+            final boolean publicationsReadable = publicationRegistryReadable;
+            final boolean tracking = activeTracking;
+            final String detail = recoveryWorkSummary;
+            runOnUiThread(() -> {
+                recoveryStatusLoading.set(false);
+                boolean diagnostic = !recoveryReadable || !publicationsReadable;
+                boolean recentOutcome = recoveryLastPublished > 0 || recoveryLastLocalOnly > 0
+                        || recoveryWaitingPermission > 0 || recoveryIntervention > 0
+                        || recoveryRecentNotice;
+                boolean visible = diagnostic || recoveryCount > 0 || publicationCount > 0
+                        || recentOutcome;
+                layoutRecoveryRetry.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+                if (!visible) {
+                    recoveryWorkSummary = "";
+                    return;
+                }
+                StringBuilder text = new StringBuilder();
+                if (!recoveryReadable) {
+                    if (!recoveries.registryReadable) {
+                        text.append(getString(R.string.gpx_recovery_registry_unreadable));
+                    } else if (!recoveries.journalReadable) {
+                        text.append(getString(R.string.gpx_recovery_journal_unreadable));
+                    } else {
+                        text.append(getString(R.string.gpx_recovery_state_not_synchronized));
+                    }
+                    if (recoveries.message != null && !recoveries.message.isEmpty())
+                        text.append(" ").append(recoveries.message);
+                } else if (!publicationsReadable) {
+                    text.append(getString(R.string.gpx_recovery_publication_registry_unreadable));
+                } else {
+                    text.append(getString(R.string.gpx_recovery_retry_counts,
+                            recoveryCount, publicationCount));
+                    if (recentOutcome) {
+                        text.append("\n").append(getString(R.string.gpx_recovery_retry_last_result,
+                                recoveryLastPublished, recoveryLastLocalOnly,
+                                recoveryWaitingPermission, recoveryIntervention));
+                    }
+                }
+                if (tracking) text.append("\n").append(getString(R.string.gpx_recovery_wait_tracking_stop));
+                if (detail != null && !detail.trim().isEmpty()) text.append("\n").append(detail);
+                tvRecoveryRetrySummary.setText(text.toString());
+                btnRetryRecovery.setEnabled(!tracking && recoveryReadable && publicationsReadable);
+            });
+        }, "gpx-recovery-status").start();
     }
 
     /**

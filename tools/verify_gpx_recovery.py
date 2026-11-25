@@ -13,6 +13,7 @@ STORE = ROOT / "app/src/main/java/com/example/gpstest/SessionStore.java"
 STORE_TEST = ROOT / "tests/SessionStoreTest.java"
 REGISTRY_TEST = ROOT / "tests/RecoveryRegistryTest.java"
 RECOVERY_WORKFLOW = ROOT / "app/src/main/java/com/example/gpstest/GpxRecoveryWorkflow.java"
+RETRY_WORKER = ROOT / "app/src/main/java/com/example/gpstest/GpxRecoveryRetryWorker.java"
 WORKFLOW = ROOT / ".github/workflows/android-build.yml"
 
 
@@ -38,6 +39,7 @@ def main() -> int:
     store_tests = read(STORE_TEST)
     registry_tests = read(REGISTRY_TEST)
     recovery_workflow = read(RECOVERY_WORKFLOW)
+    retry_worker = read(RETRY_WORKER)
     workflow = read(WORKFLOW)
 
     require("copyPrefix(source, temp, checkpoint)" in recovery,
@@ -62,12 +64,13 @@ def main() -> int:
             "un préfixe invalide est rejeté sans modification de la source")
     require("temp.renameTo(target)" in recovery and "filesEqual(target, temp)" in recovery,
             "la copie est publiée séparément et les reprises identiques sont idempotentes")
-    require("GpxRecoveryWorkflow.recoverAndPublish(" in activity
-            and "new Thread(() -> {" in activity,
-            "MainActivity déclenche le workflow de récupération/publication sur son worker de démarrage")
-    require("SessionStore.readRecoveries(MainActivity.this)" in activity
-            and "GpxRecoveryWorkflow.recoverAndPublish(" in activity,
-            "MainActivity parcourt le registre multi-sessions via le workflow transactionnel")
+    require("GpxRecoveryRetryScheduler.enqueue(this)" in activity
+            and "observeRecoveryRetryWork()" in activity
+            and "GpxRecoveryRetryWorker.UNIQUE_WORK_NAME" in activity,
+            "MainActivity délègue la reprise persistante à WorkManager et observe son état")
+    require("SessionStore.readRecoveriesDetailed(context)" in retry_worker
+            and "GpxRecoveryWorkflow.recoverAndPublish(" in retry_worker,
+            "le worker parcourt le registre détaillé et exécute le workflow transactionnel")
     require('new Thread(() -> {' in service and '"gpx-session-recovery"' in service
             and "GpxRecoveryWorkflow.recoverAndPublish(" in service,
             "le service possède un repli asynchrone commun au workflow transactionnel")

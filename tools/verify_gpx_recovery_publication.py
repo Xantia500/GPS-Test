@@ -13,6 +13,7 @@ FILES = {
     "access": JAVA / "SafRecoveryAccess.java",
     "activity": JAVA / "MainActivity.java",
     "service": JAVA / "TrackingService.java",
+    "worker": JAVA / "GpxRecoveryRetryWorker.java",
     "test": ROOT / "tests/GpxRecoveryPublisherTest.java",
     "registry_test": ROOT / "tests/RecoveryPublicationRegistryTest.java",
     "ci": ROOT / ".github/workflows/android-build.yml",
@@ -75,16 +76,17 @@ def main():
             "la relecture exige une permission SAF persistée en lecture et écriture")
     require("MAX_SCANNED_CHILDREN = 20_000" in a and "Dossier SAF trop volumineux" in a,
             "la recherche SAF est bornée et refuse les listes incomplètes")
-    require("GpxRecoveryWorkflow.recoverAndPublish(" in activity
+    require("GpxRecoveryRetryScheduler.enqueue(this)" in activity
+            and "observeRecoveryRetryWork()" in activity
             and "GpxRecoveryWorkflow.recoverAndPublish(" in service,
-            "MainActivity et TrackingService utilisent le même workflow")
-    require("isJournalAcknowledgementPending()" in activity
-            and "isJournalAcknowledgementPending()" in service
-            and "isExternalPublicationPending()" in activity
+            "MainActivity utilise la reprise WorkManager et TrackingService conserve le workflow de secours")
+    require("isJournalAcknowledgementPending()" in service
             and "isExternalPublicationPending()" in service
-            and "isRecoveredLocallyOnly()" in activity
-            and "isRecoveredLocallyOnly()" in service,
-            "les notifications distinguent publication pending et journal publié à acquitter")
+            and "isRecoveredLocallyOnly()" in service
+            and "KEY_WAITING_PERMISSION" in read("worker")
+            and "KEY_INTERVENTION" in read("worker")
+            and "gpx_recovery_retry_last_result" in activity,
+            "les statuts distinguent attente SAF, journal à acquitter, copie privée et intervention")
     require("resumesAfterDocumentCreatedButUriNotCommitted" in tests
             and "resumesAfterPartialWrite" in tests
             and "keepsTransactionWhenReadBackDiffers" in tests
