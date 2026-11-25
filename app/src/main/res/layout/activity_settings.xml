@@ -580,6 +580,24 @@
             android:textSize="12sp" />
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:paddingBottom="5dp"
+            android:text="@string/retention_settings_intro"
+            android:textColor="@color/gps_text_dim"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnManageRecovered"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_manage_recovered"
+            android:backgroundTint="@color/gps_card"
+            android:textColor="@color/gps_green"
+            android:textSize="12sp" />
+
+        <TextView
             style="@style/SectionTitle"
             android:text="@string/settings_compass_section" />
 

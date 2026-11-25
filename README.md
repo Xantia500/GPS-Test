@@ -1459,3 +1459,19 @@ aucun préchargement des serveurs de tuiles OSM n'est réalisé.
 ## Lot 7E — Expérience cartographique et navigation
 
 Voir `docs/LOT_7E_NAVIGATION.md` pour les corrections de projection Web Mercator, les gestes de navigation, le maintien du cadrage pendant les filtres, la recherche dans les catalogues déjà mis en cache, le suivi caméra et le découpage des traces GPX à l'antiméridien.
+
+---
+
+# LOT 8C-R2C.5 — Écran de gestion des traces récupérées (25 novembre 2026)
+
+R2C.5 ajoute un écran consultatif accessible depuis **Réglages → Données enregistrées → GÉRER LES TRACES RÉCUPÉRÉES**.
+
+L'écran liste les copies locales `*_RECUPEREE.gpx` inscrites au registre après publication SAF vérifiée et acquittement du journal. Il affiche nom publié, nom local, source interrompue, session/génération, date/âge, échéance des 30 jours, taille, état local par vérification de chemin canonique + longueur, permission SAF persistante, destination active/historique, SHA-256 enregistré et URI SAF.
+
+La lecture du registre et les contrôles locaux sont effectués sur un executor en arrière-plan. Le statut SAF est présenté comme **vérifié lors de la publication initiale** : l'écran ne relit pas les fournisseurs SAF à chaque ouverture et ne recalcule pas le SHA-256 local pendant le rendu.
+
+**R2C.5 ne supprime aucun fichier, ne retire aucune entrée de registre et ne déclenche aucune purge.** Les copies absentes ou de longueur divergente restent visibles pour diagnostic. La politique de 30 jours et le seuil indicatif de 512 Mio restent ceux de R2C.4.
+
+Validation de la candidate : 51 suites JVM / 1 740 assertions / 0 échec ; audit Android statique 18 XML / 97 Java ; audit cartographique 116 fichiers ; tous les contrats async-open, checkpoint, récupération, publication SAF, retry, rétention et gestion réussis. L'utilisateur compile Android localement ; aucune compilation Android n'a été lancée durant la préparation.
+
+Voir `docs/LOT-8C-R2C5-GESTION-COPIES-RECUPEREES.md` et `docs/DOSSIER-REPRISE-ULTRA-EXHAUSTIF-2026-11-25-MAJ13.md`.

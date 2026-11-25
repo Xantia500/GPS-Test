@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/gps_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/retention_screen_title"
+            android:textColor="@color/gps_green"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnRefreshRetention"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="92dp"
+            android:text="@string/retention_refresh"
+            android:textColor="@color/gps_green"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card" />
+
+        <Button
+            android:id="@+id/btnCloseRetention"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:minWidth="78dp"
+            android:text="@string/btn_close"
+            android:textColor="@color/gps_text"
+            android:textSize="11sp"
+            android:backgroundTint="@color/gps_card" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:text="@string/retention_screen_intro"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvRetentionSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:padding="10dp"
+        android:background="@color/gps_card"
+        android:textColor="@color/gps_text"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvRetentionStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="11sp" />
+
+    <ProgressBar
+        android:id="@+id/pbRetentionLoading"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:id="@+id/tvRetentionEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="20dp"
+                android:gravity="center"
+                android:text="@string/retention_empty"
+                android:textColor="@color/gps_text_dim"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/containerRetentionEntries"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="10dp"
+        android:text="@string/retention_screen_footer"
+        android:textColor="@color/gps_text_dim"
+        android:textSize="10sp" />
+</LinearLayout>

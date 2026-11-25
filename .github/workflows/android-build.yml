@@ -70,6 +70,9 @@ jobs:
       - name: Verify conservative GPX recovery retention policy
         run: python3 tools/verify_gpx_recovery_retention.py
 
+      - name: Verify GPX recovery management screen
+        run: python3 tools/verify_gpx_recovery_management.py
+
       - name: JVM regression tests
         run: bash tools/run_jvm_tests.sh
 

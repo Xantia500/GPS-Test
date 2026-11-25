@@ -179,6 +179,9 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        ((Button) findViewById(R.id.btnManageRecovered)).setOnClickListener(v ->
+                startActivity(new android.content.Intent(this, RecoveryManagementActivity.class)));
+
         ((TextView) findViewById(R.id.tvThemeSystemDesc)).setText(R.string.theme_system_desc);
         ((TextView) findViewById(R.id.tvThemeLightDesc)).setText(R.string.theme_light_desc);
         ((TextView) findViewById(R.id.tvThemeDarkDesc)).setText(R.string.theme_dark_desc);

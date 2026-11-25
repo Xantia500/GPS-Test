@@ -1,0 +1,45 @@
+GPS-Test — LOT 8C-R2C.5 — Résultats de validation
+Date : 25 novembre 2026
+Base : R2C.4
+
+TESTS JVM
+- 51 suites
+- 1 740 assertions réussies
+- 0 échec
+- RecoveryRetentionPresentationTest : 25 assertions
+
+AUDITS STATIQUES
+- verify_android_project.py : 18 XML, 97 sources Java ; réussi
+- verify_offline_map_architecture.py : 116 fichiers ; réussi
+- verify_gpx_async_open.py : réussi
+- verify_gpx_checkpoint.py : réussi
+- verify_gpx_recovery.py : réussi
+- verify_gpx_recovery_publication.py : réussi
+- verify_gpx_recovery_retry.py : réussi
+- verify_gpx_recovery_retention.py : réussi
+- verify_gpx_recovery_management.py : réussi
+- python3 -m py_compile tools/*.py : réussi
+
+VALIDATION YAML
+- GitHub Actions : nouveau contrôle de l'écran de gestion présent.
+
+RECONSTRUCTION
+- La candidate est créée à partir du projet complet R2C.4.
+- Une archive de remplacement dédiée est fournie.
+
+NON EXÉCUTÉ
+- Aucune compilation Android/Gradle n'a été lancée par l'assistant, conformément à la consigne utilisateur.
+- Aucun test appareil, ADB, DocumentsUI, fournisseur SAF réel ou capture écran émulateur n'a été effectué.
+
+RECONSTRUCTION DE L'ARCHIVE DE REMPLACEMENT
+- Extraction fraîche du projet complet R2C.4.
+- Application de l'archive des 17 fichiers de remplacement.
+- Résultat reproduit : 51 suites JVM / 1 740 assertions / 0 échec.
+- Audits Android statique, cartographie et contrats GPX/R2C repassés.
+- Les 17 fichiers du ZIP correspondent octet pour octet à la candidate reconstruite.
+- Les archives ZIP complètes passent le contrôle CRC (unzip -t).
+
+PORTÉE
+- Ces vérifications n'incluent pas une compilation Android/Gradle, un test instrumenté,
+  un essai ADB, un fournisseur SAF réel ou un test sur appareil.
+- La compilation Android R2C.5 reste à effectuer par l'utilisateur.

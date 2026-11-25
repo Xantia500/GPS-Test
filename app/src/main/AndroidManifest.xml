@@ -63,6 +63,12 @@
             android:label="@string/settings_title"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".RecoveryManagementActivity"
+            android:exported="false"
+            android:label="@string/retention_screen_title"
+            android:parentActivityName=".SettingsActivity" />
+
         <!-- Carte vectorielle locale et relecture des traces.
              configChanges="orientation|screenSize" : garder le renderer
              Mapsforge et ses fichiers ouverts pendant une rotation, plutôt
