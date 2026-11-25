@@ -12,6 +12,7 @@ REGISTRY = ROOT / "app/src/main/java/com/example/gpstest/RecoveryRegistry.java"
 STORE = ROOT / "app/src/main/java/com/example/gpstest/SessionStore.java"
 STORE_TEST = ROOT / "tests/SessionStoreTest.java"
 REGISTRY_TEST = ROOT / "tests/RecoveryRegistryTest.java"
+RECOVERY_WORKFLOW = ROOT / "app/src/main/java/com/example/gpstest/GpxRecoveryWorkflow.java"
 WORKFLOW = ROOT / ".github/workflows/android-build.yml"
 
 
@@ -36,6 +37,7 @@ def main() -> int:
     store = read(STORE)
     store_tests = read(STORE_TEST)
     registry_tests = read(REGISTRY_TEST)
+    recovery_workflow = read(RECOVERY_WORKFLOW)
     workflow = read(WORKFLOW)
 
     require("copyPrefix(source, temp, checkpoint)" in recovery,
@@ -60,17 +62,21 @@ def main() -> int:
             "un préfixe invalide est rejeté sans modification de la source")
     require("temp.renameTo(target)" in recovery and "filesEqual(target, temp)" in recovery,
             "la copie est publiée séparément et les reprises identiques sont idempotentes")
-    require("GpxRecovery.recover(getExternalFilesDir(null)" in activity,
-            "MainActivity déclenche la récupération sur son worker de démarrage")
+    require("GpxRecoveryWorkflow.recoverAndPublish(" in activity
+            and "new Thread(() -> {" in activity,
+            "MainActivity déclenche le workflow de récupération/publication sur son worker de démarrage")
     require("SessionStore.readRecoveries(MainActivity.this)" in activity
-            and "SessionStore.clearRecoveryIfUnchanged(MainActivity.this, candidate)" in activity,
-            "MainActivity parcourt le registre multi-sessions et acquitte chaque snapshot exact")
+            and "GpxRecoveryWorkflow.recoverAndPublish(" in activity,
+            "MainActivity parcourt le registre multi-sessions via le workflow transactionnel")
     require('new Thread(() -> {' in service and '"gpx-session-recovery"' in service
-            and "GpxRecovery.recover(" in service,
-            "le service possède un repli de récupération asynchrone")
+            and "GpxRecoveryWorkflow.recoverAndPublish(" in service,
+            "le service possède un repli asynchrone commun au workflow transactionnel")
     require("SessionStore.readRecoveries(TrackingService.this)" in service
-            and "SessionStore.clearRecoveryIfUnchanged(TrackingService.this, candidate)" in service,
-            "le service parcourt le registre multi-sessions et acquitte chaque segment exact")
+            and "GpxRecoveryWorkflow.recoverAndPublish(" in service,
+            "le service parcourt le registre multi-sessions via le workflow transactionnel")
+    require("SessionStore.clearRecoveryIfUnchanged(context, expected)" in recovery_workflow
+            and "store.removeVerified(published.publicationId)" in recovery_workflow,
+            "le registre de récupération n'est acquitté qu'après publication vérifiée")
     require("rejectsAMidPointPrefixWithoutChangingTheSource" in tests
             and "rejectsCheckpointCutInsideUtf8Sequence" in tests
             and "concurrentRecoveryCallsPublishOnlyOneCopy" in tests
@@ -102,7 +108,7 @@ def main() -> int:
             "la couverture teste sessions/segments multiples, corruption et limite sans éviction")
     require("Verify interrupted GPX recovery contract" in workflow,
             "GitHub Actions exécute le contrôle structurel de récupération")
-    print("OK : invariants structurels du LOT 8C-R2C.1 vérifiés.")
+    print("OK : invariants structurels récupération et publication R2C vérifiés.")
     return 0
 
 

@@ -1,0 +1,23 @@
+LOT 8C-R2C.2 — résultats de validation sur copie locale
+Date : 25 novembre 2026
+
+Tests JVM : 46 suites, 1 637 assertions réussies, 0 échec.
+- GpxRecoveryPublisherTest : 36 assertions
+- RecoveryPublicationRegistryTest : 20 assertions
+
+Audits statiques :
+- verify_gpx_recovery.py : OK
+- verify_gpx_recovery_publication.py : OK
+- verify_gpx_checkpoint.py : OK
+- verify_gpx_async_open.py : OK
+- verify_android_project.py : OK (17 XML, 89 sources Java)
+- verify_offline_map_architecture.py : OK (107 fichiers, aucun moteur raster)
+- py_compile tools/*.py : OK
+- YAML android-build.yml : syntaxe valide, jobs android et gpx-xsd
+
+Reconstruction propre depuis R2C.1 avec l’archive fichiers-à-remplacer : 46 suites / 1 637 assertions, 0 échec ; audits statiques et YAML identiques, tous réussis.
+
+Compilation Android R2C.2 : non exécutée dans le conteneur de préparation (Gradle/Wrapper et SDK Android absents) ; à confirmer dans Android Studio.
+Tests sur appareil/SAF réel/ADB : reportés à plus tard à la demande de l'utilisateur.
+Les scénarios SAF JVM utilisent un fournisseur simulé et ne remplacent pas les essais réels avec DocumentsUI / fournisseurs cloud / SD.
+GitHub : aucun fichier distant modifié.

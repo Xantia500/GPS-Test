@@ -6,6 +6,8 @@ Application de test GNSS complète : position, satellites multi-constellations *
 
 **Écrite entièrement en Java**, interface en **XML** — volontairement, pour l'apprentissage.
 
+> **État courant — 25 novembre 2026 (LOT 8C-R2C.2, candidate préparée) :** R2B.1 déplace l'ouverture GPX sur la FIFO d'écriture, R2B.2 persiste les checkpoints après `flush + FileDescriptor.sync()`, R2B.3/R2B.4 récupèrent un préfixe sûr dans une copie sans modifier l'original, R2C.1 conserve plusieurs sessions/segments dans `recovery.registry`, et R2C.2 ajoute la publication SAF transactionnelle des copies récupérées. La candidate R2C.2 passe **46 suites JVM / 1 637 assertions, 0 échec**, ainsi que les audits statiques récupération, publication SAF, checkpoint, ouverture asynchrone, Android et cartographie. La compilation Android R2C.2 reste à confirmer après remplacement. La compilation R2C.1 est confirmée par l'utilisateur. Les tests réels sur téléphone/ADB restent explicitement reportés à plus tard (voir `docs/DOSSIER-REPRISE-ULTRA-EXHAUSTIF-2026-11-25-MAJ10.md`, section 38.11). Aucun fichier GitHub n'a été modifié par l'assistant.
+
 > Les mentions de `osmdroid` et Mapnik dans l'historique des premières étapes ci-dessous sont historiques. Depuis le LOT 7G, aucun moteur raster/osmdroid n'est présent dans le code Android actif ; voir la section d'état réel et `docs/LOT_7G_CARTOGRAPHIE_LOCALE_ET_PIPELINE_GNSS.md`.
 
 ---
@@ -60,7 +62,7 @@ La CI Android de `.github/workflows/android-build.yml` a déjà été exécutée
 
 Le Gradle Wrapper n'est pas encore versionné dans cette archive. Pour supprimer la dépendance à une installation Gradle locale, le workflow génère désormais un Wrapper Gradle 9.9.2 épinglé, vérifie son lancement, puis publie temporairement les quatre fichiers dans l'artefact `gradle-wrapper-bootstrap`. Après le premier run de ce workflow, télécharger cet artefact, placer `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar` et `gradle/wrapper/gradle-wrapper.properties` à la racine du dépôt, puis les committer. Une fois le Wrapper versionné, le bootstrap de génération pourra être retiré et la CI utilisera directement `./gradlew`.
 
-### Travaux en cours — LOT 8C-R1 (journal de session durable)
+### Historique — LOT 8C-R1 (journal de session durable, fondation achevée)
 
 Une première étape de durcissement est préparée dans `docs/LOT_8C_R1_JOURNAL_DURABLE.md` : journal interne privé, écriture `AtomicFile`, migration legacy, UUID de session, lecture non destructive, acquittement durable de la notice, quarantaine d'un journal illisible et limites de taille/noms de fichier.
 
@@ -69,7 +71,7 @@ Une première étape de durcissement est préparée dans `docs/LOT_8C_R1_JOURNAL
 - **Ce snapshot R1 n'a pas encore été compilé contre le SDK Android ni exécuté sur GitHub Actions.** Ne pas confondre ces résultats JVM avec une validation Android.
 - Le checkpoint GPX réel et la réparation du XML après crash ne sont pas encore implémentés : ils sont prévus dans le LOT 8C-R2. Les tâches persistantes seront traitées en R3.
 
-Le commit R1 doit être vérifié par GitHub Actions avant d'engager le lot suivant.
+Ce relevé décrit l'état historique du lot R1. Il est dépassé par les lots R2A à R2C.2 ; pour l'état opérationnel, les livraisons, les résultats exacts et les tâches à venir, consulter le dossier de reprise MAJ10. La campagne réelle sur appareil/ADB y est toujours notée comme reportée, et non réalisée.
 
 ### ⚠️ À valider avant diffusion
 

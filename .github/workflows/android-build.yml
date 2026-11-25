@@ -61,6 +61,9 @@ jobs:
       - name: Verify interrupted GPX recovery contract
         run: python3 tools/verify_gpx_recovery.py
 
+      - name: Verify transactional recovered GPX SAF publication
+        run: python3 tools/verify_gpx_recovery_publication.py
+
       - name: JVM regression tests
         run: bash tools/run_jvm_tests.sh
 

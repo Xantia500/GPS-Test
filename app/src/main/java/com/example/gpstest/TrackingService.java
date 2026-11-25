@@ -2764,16 +2764,32 @@ public class TrackingService extends Service {
                 Thread recoveryThread = new Thread(() -> {
                     StringBuilder summary = new StringBuilder();
                     int recoveredCount = 0;
+                    int publishedCount = 0;
+                    int pendingPublicationCount = 0;
+                    int pendingJournalCount = 0;
                     int failedCount = 0;
                     for (SessionJournal candidate : pending) {
-                        GpxRecovery.Result recovery = GpxRecovery.recover(
-                                getExternalFilesDir(null), candidate.file, candidate.safeLengthBytes);
-                        if (recovery.isSuccess()) {
+                        GpxRecoveryWorkflow.Result recovery = GpxRecoveryWorkflow.recoverAndPublish(
+                                TrackingService.this, getExternalFilesDir(null), candidate);
+                        if (recovery.isRecoveredLocally()) {
                             recoveredCount++;
-                            SessionStore.clearRecoveryIfUnchanged(TrackingService.this, candidate);
+                            if (recovery.isPublishedExternally()) publishedCount++;
+                            if (recovery.isExternalPublicationPending()) pendingPublicationCount++;
+                            if (recovery.isJournalAcknowledgementPending()) pendingJournalCount++;
                             if (recoveredCount <= 5) {
                                 if (summary.length() > 0) summary.append("\n");
-                                summary.append("Récupérée : ").append(recovery.recoveredFileName);
+                                if (recovery.isPublishedExternally()) {
+                                    summary.append("Publiée : ").append(recovery.publishedDisplayName);
+                                    if (recovery.isJournalAcknowledgementPending())
+                                        summary.append(" — journal conservé pour acquittement");
+                                } else if (recovery.isRecoveredLocallyOnly()) {
+                                    summary.append("Récupérée localement : ").append(recovery.recoveredFileName);
+                                    if (recovery.isJournalAcknowledgementPending())
+                                        summary.append(" — journal conservé pour acquittement");
+                                } else {
+                                    summary.append("Publication en attente : ").append(recovery.recoveredFileName)
+                                            .append(" — ").append(recovery.message);
+                                }
                             }
                         } else {
                             failedCount++;
@@ -2789,15 +2805,15 @@ public class TrackingService extends Service {
                                 .append(Math.max(0, recoveredCount - 5)).append(" récupérés, ")
                                 .append(Math.max(0, failedCount - 5)).append(" à vérifier.");
                     }
-                    if (recoveredCount > 0 || failedCount > 0) {
-                        String message = "Récupération GPX : " + recoveredCount + " réussi(s), "
-                                + failedCount + " à vérifier.\n" + summary;
-                        ui.post(() -> {
-                            if (state.isRecording()) return;
-                            state.setSessionNotice(message);
-                            state.notifyChanged();
-                        });
-                    }
+                    String message = "Récupération GPX : " + recoveredCount + " copie(s) locale(s) sûre(s), "
+                            + publishedCount + " publiée(s), " + pendingPublicationCount
+                            + " publication(s) en attente, " + pendingJournalCount
+                            + " journal(aux) à acquitter, " + failedCount + " échec(s).\n" + summary;
+                    ui.post(() -> {
+                        if (state.isRecording()) return;
+                        state.setSessionNotice(message);
+                        state.notifyChanged();
+                    });
                 }, "gpx-registry-recovery");
                 recoveryThread.setDaemon(true);
                 recoveryThread.start();
@@ -2814,21 +2830,13 @@ public class TrackingService extends Service {
                 // MainActivity peut lancer le même contrôle ; GpxRecovery le
                 // sérialise et réutilise une copie byte-à-byte identique.
                 Thread recoveryThread = new Thread(() -> {
-                    GpxRecovery.Result recovery = GpxRecovery.recover(
-                            getExternalFilesDir(null), previous.file, previous.safeLengthBytes);
-                    if (recovery.isSuccess()) {
-                        // Effacement conditionnel : ne peut pas supprimer le
-                        // journal d'une nouvelle session déjà démarrée.
-                        SessionStore.clearRecoveryIfUnchanged(TrackingService.this, previous);
-                    }
-                    final String recoveryNotice = recovery.isSuccess()
-                            ? "Trace GPX récupérée : " + recovery.recoveredFileName
-                                + "\nLe fichier original " + previous.file + " est conservé."
-                            : previous.interruptionNotice() + "\nRécupération automatique non effectuée : "
-                                + recovery.message + " Le fichier original est conservé.";
+                    GpxRecoveryWorkflow.Result recovery = GpxRecoveryWorkflow.recoverAndPublish(
+                            TrackingService.this, getExternalFilesDir(null), previous);
+                    final String recoveryNotice = recovery.message + "\nLe fichier original "
+                            + previous.file + " est conservé.";
                     ui.post(() -> {
                         if (state.isRecording()) return; // ne pas masquer le compteur courant
-                        if (recovery.isSuccess() || state.getSessionNotice() == null) {
+                        if (recovery.isRecoveredLocally() || state.getSessionNotice() == null) {
                             state.setSessionNotice(recoveryNotice);
                             state.notifyChanged();
                         }

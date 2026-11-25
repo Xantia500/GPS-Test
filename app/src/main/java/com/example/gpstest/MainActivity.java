@@ -280,19 +280,32 @@ public class MainActivity extends AppCompatActivity {
             if (!pending.isEmpty()) {
                 StringBuilder summary = new StringBuilder();
                 int recoveredCount = 0;
+                int publishedCount = 0;
+                int pendingPublicationCount = 0;
+                int pendingJournalCount = 0;
                 int failedCount = 0;
                 for (SessionJournal candidate : pending) {
-                    GpxRecovery.Result result = GpxRecovery.recover(
-                            getExternalFilesDir(null), candidate.file, candidate.safeLengthBytes);
-                    if (result.isSuccess()) {
+                    GpxRecoveryWorkflow.Result result = GpxRecoveryWorkflow.recoverAndPublish(
+                            MainActivity.this, getExternalFilesDir(null), candidate);
+                    if (result.isRecoveredLocally()) {
                         recoveredCount++;
-                        // L'acquittement retire uniquement ce segment et ne
-                        // peut pas effacer une révision/trace plus récente.
-                        SessionStore.clearRecoveryIfUnchanged(MainActivity.this, candidate);
+                        if (result.isPublishedExternally()) publishedCount++;
+                        if (result.isExternalPublicationPending()) pendingPublicationCount++;
+                        if (result.isJournalAcknowledgementPending()) pendingJournalCount++;
                         if (recoveredCount <= 5) {
                             if (summary.length() > 0) summary.append("\n");
-                            summary.append("Récupérée : ").append(result.recoveredFileName)
-                                    .append(" (original conservé : ").append(candidate.file).append(")");
+                            if (result.isPublishedExternally()) {
+                                summary.append("Publiée : ").append(result.publishedDisplayName);
+                                if (result.isJournalAcknowledgementPending())
+                                    summary.append(" — journal conservé pour acquittement");
+                            } else if (result.isRecoveredLocallyOnly()) {
+                                summary.append("Récupérée localement : ").append(result.recoveredFileName);
+                                if (result.isJournalAcknowledgementPending())
+                                    summary.append(" — journal conservé pour acquittement");
+                            } else {
+                                summary.append("Publication en attente : ").append(result.recoveredFileName)
+                                        .append(" — ").append(result.message);
+                            }
                         }
                     } else {
                         failedCount++;
@@ -308,12 +321,10 @@ public class MainActivity extends AppCompatActivity {
                             .append(Math.max(0, recoveredCount - 5)).append(" récupérés, ")
                             .append(Math.max(0, failedCount - 5)).append(" à vérifier.");
                 }
-                if (recoveredCount > 0 && failedCount == 0) {
-                    summary.insert(0, "Récupération GPX terminée : " + recoveredCount + " segment(s).\n");
-                } else {
-                    summary.insert(0, "Récupération GPX : " + recoveredCount + " réussi(s), "
-                            + failedCount + " à vérifier.\n");
-                }
+                summary.insert(0, "Récupération GPX : " + recoveredCount + " copie(s) locale(s) sûre(s), "
+                        + publishedCount + " publiée(s), " + pendingPublicationCount
+                        + " publication(s) en attente, " + pendingJournalCount
+                        + " journal(aux) à acquitter, " + failedCount + " échec(s).\n");
                 final String display = summary.toString();
                 runOnUiThread(() -> {
                     if (state.isUserWantsTracking()) return;
@@ -332,16 +343,9 @@ public class MainActivity extends AppCompatActivity {
             String notice = previous.interruptionNotice();
             if (notice == null) return;
             if (interruptedRecording) {
-                GpxRecovery.Result recovery = GpxRecovery.recover(getExternalFilesDir(null),
-                        previous.file, previous.safeLengthBytes);
-                if (recovery.isSuccess()) {
-                    SessionStore.clearRecoveryIfUnchanged(MainActivity.this, previous);
-                    notice = "Trace GPX récupérée : " + recovery.recoveredFileName
-                            + "\nLe fichier original " + previous.file + " est conservé. ";
-                } else {
-                    notice += "\nRécupération automatique non effectuée : "
-                            + recovery.message + " Le fichier original est conservé.";
-                }
+                GpxRecoveryWorkflow.Result recovery = GpxRecoveryWorkflow.recoverAndPublish(
+                        MainActivity.this, getExternalFilesDir(null), previous);
+                notice = recovery.message + "\nLe fichier original " + previous.file + " est conservé.";
             }
             final String displayNotice = notice;
             runOnUiThread(() -> {
