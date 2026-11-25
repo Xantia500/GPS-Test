@@ -23,6 +23,7 @@ public final class SessionStore {
     private static final Object LOCK = new Object();
     /** Le journal ne contient que quelques champs : toute taille supérieure est suspecte. */
     private static final int MAX_JOURNAL_BYTES = 16 * 1024;
+    private static final String RECOVERY_REGISTRY_FILE = "recovery.registry";
 
     private SessionStore() { }
 
@@ -30,6 +31,12 @@ public final class SessionStore {
         if (ctx == null) return null;
         File dir = ctx.getFilesDir();
         return dir == null ? null : new File(dir, SessionJournal.FILE_NAME);
+    }
+
+    private static File recoveryRegistryFile(Context ctx) {
+        if (ctx == null) return null;
+        File dir = ctx.getFilesDir();
+        return dir == null ? null : new File(dir, RECOVERY_REGISTRY_FILE);
     }
 
     private static File legacyFile(Context ctx) {
@@ -71,6 +78,108 @@ public final class SessionStore {
         return migrated;
     }
 
+    /** Liste durable des segments GPX interrompus. À appeler hors thread principal. */
+    public static java.util.List<SessionJournal> readRecoveries(Context ctx) {
+        synchronized (LOCK) {
+            if (ctx == null) return java.util.Collections.emptyList();
+            RecoveryRegistry registry = readRegistryLocked(ctx);
+            if (registry == null) return java.util.Collections.emptyList();
+            SessionJournal current = readLocked(ctx);
+            if (RecoveryRegistry.isEligible(current)) {
+                if (!registry.upsert(current) || !writeRegistryLocked(ctx, registry))
+                    return registry.snapshots();
+            }
+            return registry.snapshots();
+        }
+    }
+
+    /** Acquitte une entrée récupérée sans toucher au journal d'une autre session. */
+    public static boolean clearRecoveryIfUnchanged(Context ctx, SessionJournal expected) {
+        if (ctx == null || expected == null) return false;
+        synchronized (LOCK) {
+            RecoveryRegistry registry = readRegistryLocked(ctx);
+            boolean removedRegistry = false;
+            if (registry != null) {
+                removedRegistry = registry.removeIfUnchanged(expected);
+                if (removedRegistry && !writeRegistryLocked(ctx, registry)) return false;
+            } else if (hasRegistryState(ctx)) {
+                return false;
+            }
+            SessionJournal current = readLocked(ctx);
+            boolean removedCurrent = RecoveryRegistry.sameSnapshot(current, expected);
+            // Le journal courant n'est supprimé que si tous ses champs sont
+            // encore identiques au snapshot utilisé pour cette récupération.
+            // Même un offset égal ne suffit pas : des points peuvent être en
+            // attente du prochain checkpoint, ou l'état recording/notice peut
+            // avoir évolué pendant la copie. Une récupération répétée est
+            // préférable à la suppression d'un état plus récent.
+            if (removedCurrent) deleteJournalOnlyLocked(ctx);
+            return removedRegistry || removedCurrent;
+        }
+    }
+
+    /** Retire un segment seulement après fermeture et checkpoint final confirmés. */
+    public static boolean clearRecoverySegment(Context ctx, String sessionId,
+                                               long generation, String fileName,
+                                               long safeLengthBytes) {
+        if (ctx == null || sessionId == null || sessionId.isEmpty()
+                || fileName == null || fileName.isEmpty() || safeLengthBytes <= 0L) return false;
+        synchronized (LOCK) {
+            RecoveryRegistry registry = readRegistryLocked(ctx);
+            if (registry == null) return !hasRegistryState(ctx);
+            if (!registry.removeSegment(sessionId, generation, fileName, safeLengthBytes)) return false;
+            return writeRegistryLocked(ctx, registry);
+        }
+    }
+
+    private static RecoveryRegistry readRegistryLocked(Context ctx) {
+        File base = recoveryRegistryFile(ctx);
+        if (base == null) return null;
+        File backup = new File(base.getPath() + ".bak");
+        if (!base.exists() && !backup.exists()) return RecoveryRegistry.empty();
+        try (InputStream in = new AtomicFile(base).openRead()) {
+            return RecoveryRegistry.parse(readUtf8(in, RecoveryRegistry.MAX_TEXT_CHARS));
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    private static boolean hasRegistryState(Context ctx) {
+        File base = recoveryRegistryFile(ctx);
+        return base != null && (base.exists() || new File(base.getPath() + ".bak").exists()
+                || new File(base.getPath() + ".new").exists());
+    }
+
+    private static boolean writeRegistryLocked(Context ctx, RecoveryRegistry registry) {
+        File base = recoveryRegistryFile(ctx);
+        if (base == null || registry == null) return false;
+        if (hasRegistryState(ctx) && readRegistryLocked(ctx) == null) return false;
+        File dir = base.getParentFile();
+        if (dir == null || (!dir.exists() && !dir.mkdirs())) return false;
+        AtomicFile atomic = new AtomicFile(base);
+        FileOutputStream stream = null;
+        try {
+            stream = atomic.startWrite();
+            stream.write(registry.toText().getBytes(StandardCharsets.UTF_8));
+            stream.flush();
+            stream.getFD().sync();
+            atomic.finishWrite(stream);
+            stream = null;
+            return true;
+        } catch (Exception error) {
+            if (stream != null) {
+                try { atomic.failWrite(stream); } catch (Exception ignored) { }
+            }
+            return false;
+        }
+    }
+
+    private static boolean upsertRecoveryLocked(Context ctx, SessionJournal journal) {
+        if (!RecoveryRegistry.isEligible(journal)) return true;
+        RecoveryRegistry registry = readRegistryLocked(ctx);
+        return registry != null && registry.upsert(journal) && writeRegistryLocked(ctx, registry);
+    }
+
     private static SessionJournal readAtomic(File base) {
         try (InputStream in = new AtomicFile(base).openRead()) {
             return SessionJournal.parse(readUtf8(in));
@@ -101,6 +210,12 @@ public final class SessionStore {
                 // quarantaine (copie synchronisée ou renommage rapide si énorme).
                 if (!preserveUnreadableState(base)) return false;
             }
+            if (current != null && !current.sessionId.equals(journal.sessionId)
+                    && RecoveryRegistry.isEligible(current)) {
+                // Préserver l'ancien checkpoint avant qu'un nouveau START
+                // remplace le journal courant unique.
+                if (!upsertRecoveryLocked(ctx, current)) return false;
+            }
             if (current != null && current.sessionId.equals(journal.sessionId)) {
                 // Les snapshots d'un segment ancien peuvent arriver après le
                 // démarrage du suivant (threads UI, ioFile et ioMeta). La
@@ -127,10 +242,13 @@ public final class SessionStore {
                 // une notice déjà présentée pour cette même session.
                 journal.revision = current.revision == Long.MAX_VALUE
                         ? Long.MAX_VALUE : current.revision + 1L;
+                journal.savedAtMs = Math.max(journal.savedAtMs, current.savedAtMs);
                 journal.noticeShown = journal.noticeShown || current.noticeShown;
             } else {
                 journal.revision = Math.max(1L, journal.revision);
             }
+            if (RecoveryRegistry.isEligible(journal)
+                    && !upsertRecoveryLocked(ctx, journal)) return false;
             if (!writeAtomic(base, journal)) return false;
             // Le journal legacy n'est supprimé que dans readLocked(), après
             // migration réussie. S'il coexiste avec un interne illisible, on
@@ -188,16 +306,43 @@ public final class SessionStore {
         if (probe.file.isEmpty()) return false;
         synchronized (LOCK) {
             SessionJournal current = readLocked(ctx);
-            if (current == null || !expectedSessionId.equals(current.sessionId)
-                    || current.segmentGeneration != segmentGeneration
-                    || !current.file.equals(probe.file)
-                    || safeLengthBytes < current.safeLengthBytes) return false;
-            if (safeLengthBytes == current.safeLengthBytes) return true;
-            current.safeLengthBytes = safeLengthBytes;
-            current.savedAtMs = System.currentTimeMillis();
-            current.revision = current.revision == Long.MAX_VALUE
-                    ? Long.MAX_VALUE : current.revision + 1L;
-            return writeLocked(ctx, current);
+            long now = System.currentTimeMillis();
+            if (current != null && expectedSessionId.equals(current.sessionId)
+                    && current.segmentGeneration == segmentGeneration
+                    && current.file.equals(probe.file)) {
+                if (safeLengthBytes < current.safeLengthBytes) return false;
+                if (safeLengthBytes == current.safeLengthBytes) {
+                    return !RecoveryRegistry.isEligible(current)
+                            || upsertRecoveryLocked(ctx, current);
+                }
+                current.safeLengthBytes = safeLengthBytes;
+                current.savedAtMs = Math.max(current.savedAtMs, now);
+                current.revision = current.revision == Long.MAX_VALUE
+                        ? Long.MAX_VALUE : current.revision + 1L;
+                // Le registre précède le journal courant : un arrêt entre les
+                // deux écritures ne perd pas le checkpoint déjà synchronisé.
+                if (RecoveryRegistry.isEligible(current)
+                        && !upsertRecoveryLocked(ctx, current)) return false;
+                return writeLocked(ctx, current);
+            }
+
+            // La fermeture d'un segment peut finir après le passage du journal
+            // courant au segment suivant (ou à une autre session). Son entrée
+            // reste indépendante et doit recevoir son checkpoint final.
+            RecoveryRegistry registry = readRegistryLocked(ctx);
+            if (registry == null) return false;
+            if (!registry.advanceCheckpoint(expectedSessionId, segmentGeneration,
+                    probe.file, safeLengthBytes, now)) {
+                // Un segment dont l'ouverture était encore en file peut publier
+                // son premier checkpoint après le START d'une autre session.
+                // L'appel n'arrive qu'après flush + fd.sync sur le writer exact :
+                // créer alors un snapshot minimal est sûr, même sans journal actif.
+                SessionJournal detached = SessionJournal.of(expectedSessionId, true,
+                        0L, now, true, false, 0L, 0, 0L, 0,
+                        probe.file, safeLengthBytes, segmentGeneration);
+                if (!registry.upsert(detached)) return false;
+            }
+            return writeRegistryLocked(ctx, registry);
         }
     }
 
@@ -283,11 +428,13 @@ public final class SessionStore {
 
     /** Efface uniquement le journal de la session attendue. */
     public static boolean clearIfSameSession(Context ctx, String expectedSessionId) {
-        if (expectedSessionId == null || expectedSessionId.isEmpty()) return false;
+        if (ctx == null || expectedSessionId == null || expectedSessionId.isEmpty()) return false;
         synchronized (LOCK) {
             SessionJournal current = readLocked(ctx);
             if (current == null || !expectedSessionId.equals(current.sessionId)) return false;
-            deleteLocked(ctx);
+            // Les entrées de segments sont retirées par clearRecoverySegment
+            // seulement après fermeture et synchronisation finales prouvées.
+            deleteJournalOnlyLocked(ctx);
             return true;
         }
     }
@@ -297,11 +444,12 @@ public final class SessionStore {
         if (expected == null) return false;
         synchronized (LOCK) {
             SessionJournal current = readLocked(ctx);
-            if (current == null
-                    || !expected.sessionId.equals(current.sessionId)
-                    || expected.revision != current.revision
-                    || expected.savedAtMs != current.savedAtMs) return false;
-            deleteLocked(ctx);
+            if (current == null || !RecoveryRegistry.sameSnapshot(current, expected)) return false;
+            RecoveryRegistry registry = readRegistryLocked(ctx);
+            if (registry == null && hasRegistryState(ctx)) return false;
+            if (registry != null && registry.removeIfUnchanged(expected)
+                    && !writeRegistryLocked(ctx, registry)) return false;
+            deleteJournalOnlyLocked(ctx);
             return true;
         }
     }
@@ -314,6 +462,12 @@ public final class SessionStore {
     }
 
     private static void deleteLocked(Context ctx) {
+        File registry = recoveryRegistryFile(ctx);
+        if (registry != null) new AtomicFile(registry).delete();
+        deleteJournalOnlyLocked(ctx);
+    }
+
+    private static void deleteJournalOnlyLocked(Context ctx) {
         File current = file(ctx);
         if (current != null) new AtomicFile(current).delete();
         File legacy = legacyFile(ctx);
@@ -343,20 +497,22 @@ public final class SessionStore {
                     || new File(current.getPath() + ".bak").exists()
                     || new File(current.getPath() + ".new").exists())) return true;
             File legacy = legacyFile(ctx);
-            return legacy != null && legacy.exists();
+            return (legacy != null && legacy.exists()) || hasRegistryState(ctx);
         }
     }
 
     private static String readUtf8(InputStream in) throws Exception {
+        return readUtf8(in, MAX_JOURNAL_BYTES);
+    }
+
+    private static String readUtf8(InputStream in, int maxBytes) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream(384);
-        byte[] buffer = new byte[512];
+        byte[] buffer = new byte[2048];
         int count;
         int total = 0;
         while ((count = in.read(buffer)) > 0) {
             total += count;
-            if (total > MAX_JOURNAL_BYTES) {
-                throw new java.io.IOException("Journal de session anormalement volumineux");
-            }
+            if (total > maxBytes) throw new java.io.IOException("Journal/registre trop volumineux");
             out.write(buffer, 0, count);
         }
         return new String(out.toByteArray(), StandardCharsets.UTF_8);

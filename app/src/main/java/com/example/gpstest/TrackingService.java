@@ -2148,7 +2148,9 @@ public class TrackingService extends Service {
         if (meta == null) return; // le snapshot de fermeture sur ioFile contient encore l'offset
         final String name = segment.file.getName();
         boolean queued = meta.post(() -> {
-            if (!segment.sessionId.equals(sessionId)) return;
+            // Ne pas écarter un segment ancien : son premier/final checkpoint
+            // peut arriver après un nouveau START. SessionStore l'isole par
+            // sessionId + génération + nom de fichier dans le registre R2C.
             if (!SessionStore.updateCheckpoint(TrackingService.this, segment.sessionId,
                     segment.id, name, length)) {
                 android.util.Log.w("TrackingService", "Checkpoint GPX non inscrit (session/segment différent ou journal absent) : " + name);
@@ -2161,6 +2163,23 @@ public class TrackingService extends Service {
         if (!queued) {
             reportSegmentDurability(segment,
                     "Préfixe GPX synchronisé, mais file du journal indisponible");
+        }
+    }
+
+    /** Retire le candidat de récupération après fermeture + sync du fichier complet. */
+    private void queueSegmentRecoveryRemoval(final RecordingSegment segment,
+                                             final long finalLength) {
+        if (segment == null || segment.file == null || finalLength <= 0L) return;
+        final Handler meta = ioMeta;
+        if (meta == null) return; // conserver l'entrée est plus sûr qu'un clear non confirmé
+        final String fileName = segment.file.getName();
+        boolean queued = meta.post(() -> {
+            SessionStore.clearRecoverySegment(TrackingService.this, segment.sessionId,
+                    segment.id, fileName, finalLength);
+        });
+        if (!queued) {
+            android.util.Log.w("TrackingService",
+                    "Nettoyage du registre de récupération différé : " + fileName);
         }
     }
 
@@ -2396,6 +2415,18 @@ public class TrackingService extends Service {
             reportSegmentGpxError(segment, "Fermeture GPX : " + e.getClass().getSimpleName()
                     + (e.getMessage() != null ? " — " + e.getMessage() : ""));
             try { if (segment.output != null) segment.output.close(); } catch (Exception ignored) { }
+        }
+        if (closedCleanly && !segment.writeFailed && !segment.openFailed
+                && segment.file != null) {
+            GpxCheckpoint.Snapshot finalCheckpoint = segment.checkpoint.snapshot();
+            // N'effacer l'entrée de récupération qu'après un checkpoint qui
+            // couvre exactement le fichier fermé, pied GPX compris.
+            if (finalCheckpoint != null
+                    && segment.file.getName().equals(finalCheckpoint.fileName)
+                    && finalCheckpoint.safeLengthBytes > 0L
+                    && finalCheckpoint.safeLengthBytes == segment.file.length()) {
+                queueSegmentRecoveryRemoval(segment, finalCheckpoint.safeLengthBytes);
+            }
         }
         if (segment.publishEnabled) {
             if (!closedCleanly || segment.writeFailed || segment.openFailed || segment.file == null) {
@@ -2724,6 +2755,55 @@ public class TrackingService extends Service {
             // Ne pas tester userWantsTracking ici : ce flag est posé très tôt,
             // avant startForeground(), et un lancement rapide pourrait
             // sinon masquer le journal de la session morte précédente.
+            // R2C : le journal courant peut déjà appartenir à un nouveau START.
+            // Le registre conserve indépendamment tous les segments dont la
+            // fermeture durable n'a pas encore été confirmée.
+            final java.util.List<SessionJournal> pending =
+                    SessionStore.readRecoveries(TrackingService.this);
+            if (!pending.isEmpty()) {
+                Thread recoveryThread = new Thread(() -> {
+                    StringBuilder summary = new StringBuilder();
+                    int recoveredCount = 0;
+                    int failedCount = 0;
+                    for (SessionJournal candidate : pending) {
+                        GpxRecovery.Result recovery = GpxRecovery.recover(
+                                getExternalFilesDir(null), candidate.file, candidate.safeLengthBytes);
+                        if (recovery.isSuccess()) {
+                            recoveredCount++;
+                            SessionStore.clearRecoveryIfUnchanged(TrackingService.this, candidate);
+                            if (recoveredCount <= 5) {
+                                if (summary.length() > 0) summary.append("\n");
+                                summary.append("Récupérée : ").append(recovery.recoveredFileName);
+                            }
+                        } else {
+                            failedCount++;
+                            if (failedCount <= 5) {
+                                if (summary.length() > 0) summary.append("\n");
+                                summary.append("À vérifier : ").append(candidate.file)
+                                        .append(" — ").append(recovery.message);
+                            }
+                        }
+                    }
+                    if (recoveredCount > 5 || failedCount > 5) {
+                        summary.append("\nAutres éléments : ")
+                                .append(Math.max(0, recoveredCount - 5)).append(" récupérés, ")
+                                .append(Math.max(0, failedCount - 5)).append(" à vérifier.");
+                    }
+                    if (recoveredCount > 0 || failedCount > 0) {
+                        String message = "Récupération GPX : " + recoveredCount + " réussi(s), "
+                                + failedCount + " à vérifier.\n" + summary;
+                        ui.post(() -> {
+                            if (state.isRecording()) return;
+                            state.setSessionNotice(message);
+                            state.notifyChanged();
+                        });
+                    }
+                }, "gpx-registry-recovery");
+                recoveryThread.setDaemon(true);
+                recoveryThread.start();
+                return;
+            }
+
             SessionJournal previous = SessionStore.read(TrackingService.this);
             if (previous == null) return;
 
@@ -2739,7 +2819,7 @@ public class TrackingService extends Service {
                     if (recovery.isSuccess()) {
                         // Effacement conditionnel : ne peut pas supprimer le
                         // journal d'une nouvelle session déjà démarrée.
-                        SessionStore.clearIfUnchanged(TrackingService.this, previous);
+                        SessionStore.clearRecoveryIfUnchanged(TrackingService.this, previous);
                     }
                     final String recoveryNotice = recovery.isSuccess()
                             ? "Trace GPX récupérée : " + recovery.recoveredFileName

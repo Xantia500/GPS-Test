@@ -272,24 +272,70 @@ public class MainActivity extends AppCompatActivity {
         // de « skipped frames ». StrictMode le signalerait.
         new Thread(() -> {
             if (state.isUserWantsTracking()) return; // session actuellement vivante
+
+            // R2C : récupérer toutes les entrées persistées, pas seulement le
+            // journal courant qui peut déjà appartenir à une nouvelle session.
+            final java.util.List<SessionJournal> pending =
+                    SessionStore.readRecoveries(MainActivity.this);
+            if (!pending.isEmpty()) {
+                StringBuilder summary = new StringBuilder();
+                int recoveredCount = 0;
+                int failedCount = 0;
+                for (SessionJournal candidate : pending) {
+                    GpxRecovery.Result result = GpxRecovery.recover(
+                            getExternalFilesDir(null), candidate.file, candidate.safeLengthBytes);
+                    if (result.isSuccess()) {
+                        recoveredCount++;
+                        // L'acquittement retire uniquement ce segment et ne
+                        // peut pas effacer une révision/trace plus récente.
+                        SessionStore.clearRecoveryIfUnchanged(MainActivity.this, candidate);
+                        if (recoveredCount <= 5) {
+                            if (summary.length() > 0) summary.append("\n");
+                            summary.append("Récupérée : ").append(result.recoveredFileName)
+                                    .append(" (original conservé : ").append(candidate.file).append(")");
+                        }
+                    } else {
+                        failedCount++;
+                        if (failedCount <= 5) {
+                            if (summary.length() > 0) summary.append("\n");
+                            summary.append("À vérifier : ").append(candidate.file)
+                                    .append(" — ").append(result.message);
+                        }
+                    }
+                }
+                if (recoveredCount > 5 || failedCount > 5) {
+                    summary.append("\nAutres éléments : ")
+                            .append(Math.max(0, recoveredCount - 5)).append(" récupérés, ")
+                            .append(Math.max(0, failedCount - 5)).append(" à vérifier.");
+                }
+                if (recoveredCount > 0 && failedCount == 0) {
+                    summary.insert(0, "Récupération GPX terminée : " + recoveredCount + " segment(s).\n");
+                } else {
+                    summary.insert(0, "Récupération GPX : " + recoveredCount + " réussi(s), "
+                            + failedCount + " à vérifier.\n");
+                }
+                final String display = summary.toString();
+                runOnUiThread(() -> {
+                    if (state.isUserWantsTracking()) return;
+                    state.setSessionNotice(display);
+                    state.notifyChanged();
+                });
+                return;
+            }
+
+            // Compatibilité des anciens journaux sans checkpoint durable :
+            // aucune réparation n'est inventée, seule la notice historique reste.
             final SessionJournal previous = SessionStore.read(MainActivity.this);
             if (previous == null) return;
-
             final boolean interruptedRecording = previous.isUnexpectedRecordingInterruption();
             if (!interruptedRecording && previous.noticeShown) return;
             String notice = previous.interruptionNotice();
             if (notice == null) return;
-
-            GpxRecovery.Result recovery = null;
             if (interruptedRecording) {
-                // La source n'est jamais tronquée : la récupération fabrique
-                // une copie *_RECUPEREE à partir du seul préfixe synchronisé.
-                recovery = GpxRecovery.recover(getExternalFilesDir(null),
+                GpxRecovery.Result recovery = GpxRecovery.recover(getExternalFilesDir(null),
                         previous.file, previous.safeLengthBytes);
                 if (recovery.isSuccess()) {
-                    // Ne jamais effacer un journal qui aurait déjà été remplacé
-                    // par une nouvelle session démarrée pendant la copie.
-                    SessionStore.clearIfUnchanged(MainActivity.this, previous);
+                    SessionStore.clearRecoveryIfUnchanged(MainActivity.this, previous);
                     notice = "Trace GPX récupérée : " + recovery.recoveredFileName
                             + "\nLe fichier original " + previous.file + " est conservé. ";
                 } else {
@@ -297,21 +343,13 @@ public class MainActivity extends AppCompatActivity {
                             + recovery.message + " Le fichier original est conservé.";
                 }
             }
-
             final String displayNotice = notice;
-            final GpxRecovery.Result recoveryResult = recovery;
             runOnUiThread(() -> {
-                // Ne pas remplacer l'affichage d'un nouvel enregistrement qui
-                // aurait démarré pendant la récupération de l'ancienne trace.
                 if (state.isUserWantsTracking()) return;
-                if (recoveryResult != null && recoveryResult.isSuccess()) {
-                    state.setSessionNotice(displayNotice);
-                } else if (state.getSessionNotice() == null) {
+                if (state.getSessionNotice() == null || interruptedRecording) {
                     state.setSessionNotice(displayNotice);
                 }
                 state.notifyChanged();
-                // Une interruption GPX non récupérée reste réessayable au
-                // prochain lancement (stockage débranché, fichier temporairement absent).
                 if (!interruptedRecording) {
                     new Thread(() -> SessionStore.markNoticeShown(
                             MainActivity.this, previous), "session-journal-ack").start();

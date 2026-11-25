@@ -8,6 +8,10 @@ RECOVERY = ROOT / "app/src/main/java/com/example/gpstest/GpxRecovery.java"
 ACTIVITY = ROOT / "app/src/main/java/com/example/gpstest/MainActivity.java"
 SERVICE = ROOT / "app/src/main/java/com/example/gpstest/TrackingService.java"
 TEST = ROOT / "tests/GpxRecoveryTest.java"
+REGISTRY = ROOT / "app/src/main/java/com/example/gpstest/RecoveryRegistry.java"
+STORE = ROOT / "app/src/main/java/com/example/gpstest/SessionStore.java"
+STORE_TEST = ROOT / "tests/SessionStoreTest.java"
+REGISTRY_TEST = ROOT / "tests/RecoveryRegistryTest.java"
 WORKFLOW = ROOT / ".github/workflows/android-build.yml"
 
 
@@ -28,6 +32,10 @@ def main() -> int:
     activity = read(ACTIVITY)
     service = read(SERVICE)
     tests = read(TEST)
+    registry = read(REGISTRY)
+    store = read(STORE)
+    store_tests = read(STORE_TEST)
+    registry_tests = read(REGISTRY_TEST)
     workflow = read(WORKFLOW)
 
     require("copyPrefix(source, temp, checkpoint)" in recovery,
@@ -54,24 +62,47 @@ def main() -> int:
             "la copie est publiée séparément et les reprises identiques sont idempotentes")
     require("GpxRecovery.recover(getExternalFilesDir(null)" in activity,
             "MainActivity déclenche la récupération sur son worker de démarrage")
-    require("SessionStore.clearIfUnchanged(MainActivity.this, previous)" in activity,
-            "MainActivity acquitte uniquement le snapshot exact qui a été récupéré")
+    require("SessionStore.readRecoveries(MainActivity.this)" in activity
+            and "SessionStore.clearRecoveryIfUnchanged(MainActivity.this, candidate)" in activity,
+            "MainActivity parcourt le registre multi-sessions et acquitte chaque snapshot exact")
     require('new Thread(() -> {' in service and '"gpx-session-recovery"' in service
             and "GpxRecovery.recover(" in service,
             "le service possède un repli de récupération asynchrone")
-    require("SessionStore.clearIfUnchanged(TrackingService.this, previous)" in service,
-            "le service acquitte uniquement le snapshot exact qui a été récupéré")
+    require("SessionStore.readRecoveries(TrackingService.this)" in service
+            and "SessionStore.clearRecoveryIfUnchanged(TrackingService.this, candidate)" in service,
+            "le service parcourt le registre multi-sessions et acquitte chaque segment exact")
     require("rejectsAMidPointPrefixWithoutChangingTheSource" in tests
             and "rejectsCheckpointCutInsideUtf8Sequence" in tests
             and "concurrentRecoveryCallsPublishOnlyOneCopy" in tests
             and "detectsSameLengthSourceMutationWithPrefixDigest" in tests
             and "reusesAnIdenticalRecoveredCopyAndNeverOverwritesAConflict" in tests,
             "les tests couvrent les coupures XML/UTF-8, modifications de source, concurrence et collisions")
-    require("SessionStore.clearIfUnchanged(context, recoveryRead)" in read(ROOT / "tests/SessionStoreTest.java"),
+    require("SessionStore.clearIfUnchanged(context, recoveryRead)" in store_tests,
             "un checkpoint plus récent de la même session ne peut pas être effacé")
+    require("MAX_ENTRIES = 64" in registry and "sameSegment" in registry
+            and "advanceCheckpoint" in registry and "removeSegment" in registry
+            and "onMalformedInput(CodingErrorAction.REPORT)" in registry
+            and "private static int asciiHex" in registry,
+            "le modèle du registre borne les entrées, garde la monotonie et parse strictement UTF-8/hex")
+    require("readRecoveries(Context ctx)" in store and "clearRecoveryIfUnchanged" in store
+            and "clearRecoverySegment" in store and "upsertRecoveryLocked" in store,
+            "SessionStore persiste le registre et protège les acquittements ciblés")
+    require("updateCheckpoint" in store and "registry.advanceCheckpoint" in store
+            and "SessionJournal detached" in store,
+            "un callback de checkpoint ancien/tardif reste rattaché au bon segment")
+    require("queueSegmentRecoveryRemoval" in service
+            and "finalCheckpoint.safeLengthBytes == segment.file.length()" in service,
+            "un segment n'est retiré du registre qu'après sync complet du pied GPX")
+    require("R2C : le journal courant peut déjà appartenir à un nouveau START" in service
+            and "Registre multi-sessions et multi-segments durable" in store_tests
+            and "MAX_ENTRIES" in registry_tests
+            and "entries.size() >= MAX_ENTRIES" in registry
+            and "un contenu UTF-8 mal formé est refusé strictement" in registry_tests
+            and "le registre corrompu reste disponible pour diagnostic" in store_tests,
+            "la couverture teste sessions/segments multiples, corruption et limite sans éviction")
     require("Verify interrupted GPX recovery contract" in workflow,
             "GitHub Actions exécute le contrôle structurel de récupération")
-    print("OK : invariants structurels du LOT 8C-R2B.4 vérifiés.")
+    print("OK : invariants structurels du LOT 8C-R2C.1 vérifiés.")
     return 0
 
 

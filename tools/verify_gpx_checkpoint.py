@@ -82,10 +82,12 @@ def main() -> int:
     require("journal.segmentGeneration < current.segmentGeneration" in write
             and "Math.max(journal.safeLengthBytes" in write,
             "les snapshots retardés sont rejetés et les checkpoints d'un même fichier ne régressent pas", failures)
-    require("current.segmentGeneration != segmentGeneration" in checkpoint_store
-            and "!current.file.equals(probe.file)" in checkpoint_store
-            and "safeLengthBytes < current.safeLengthBytes" in checkpoint_store,
-            "le store exige session, génération, nom de fichier et longueur monotone", failures)
+    require("current.segmentGeneration == segmentGeneration" in checkpoint_store
+            and "current.file.equals(probe.file)" in checkpoint_store
+            and "safeLengthBytes < current.safeLengthBytes" in checkpoint_store
+            and "registry.advanceCheckpoint" in checkpoint_store
+            and "SessionJournal detached" in checkpoint_store,
+            "le store vérifie le segment courant et route les callbacks retardés vers le registre", failures)
     require("segmentGeneration < current.segmentGeneration" in register_store
             and "current.safeLengthBytes = 0L" in register_store,
             "l'ouverture d'un nouveau segment réinitialise son offset et bloque les anciens", failures)
@@ -97,7 +99,7 @@ def main() -> int:
     if failures:
         print(f"ÉCHEC : {len(failures)} invariant(s) non respecté(s).", file=sys.stderr)
         return 1
-    print("OK : invariants structurels du LOT 8C-R2B.2 vérifiés.")
+    print("OK : invariants structurels du checkpoint durable et du routage multi-segments vérifiés.")
     return 0
 
 

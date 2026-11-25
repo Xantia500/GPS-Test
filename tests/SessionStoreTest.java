@@ -72,8 +72,13 @@ public final class SessionStoreTest {
         ok(afterGenerationTwo.segmentGeneration == 2L && afterGenerationTwo.file.isEmpty()
                         && afterGenerationTwo.safeLengthBytes == 0L,
                 "le nouveau segment repart sans hériter du fichier ni de l'offset précédent");
-        ok(!SessionStore.updateCheckpoint(context, "generation-session", 1L,
-                "segment-1.gpx", 16_384L), "un checkpoint retardé du segment 1 est rejeté");
+        ok(SessionStore.updateCheckpoint(context, "generation-session", 1L,
+                "segment-1.gpx", 16_384L),
+                "la fermeture retardée du segment 1 actualise son entrée indépendante");
+        java.util.List<SessionJournal> recoveriesAfterOldClose = SessionStore.readRecoveries(context);
+        ok(containsRecovery(recoveriesAfterOldClose, "generation-session", 1L,
+                "segment-1.gpx", 16_384L),
+                "le checkpoint final du segment 1 reste enregistré jusqu'à fermeture confirmée");
         ok(SessionStore.registerSegment(context, "generation-session", 2L, "segment-2.gpx"),
                 "le fichier du segment 2 est enregistré");
         ok(SessionStore.updateCheckpoint(context, "generation-session", 2L,
@@ -167,6 +172,111 @@ public final class SessionStoreTest {
         ok(SessionStore.read(context) == null,
                 "le journal exact est supprimé après son acquittement");
 
+        section("Un acquittement différé ne supprime pas un journal modifié à offset identique");
+        SessionStore.clear(context);
+        SessionJournal samePrefix = SessionJournal.of("same-prefix-session", true,
+                600L, 700L, true, false, 4L, 0, 4L, 0,
+                "same-prefix.gpx", 4_096L, 1L);
+        ok(SessionStore.write(context, samePrefix),
+                "journal actif et registre du même préfixe écrits");
+        SessionJournal recoverySnapshot = findRecovery(SessionStore.readRecoveries(context),
+                "same-prefix-session", 1L);
+        ok(recoverySnapshot != null, "snapshot exact de récupération capturé");
+        ok(SessionStore.markNoticeShown(context, recoverySnapshot),
+                "le journal courant évolue pendant la récupération sans changer l'offset");
+        ok(SessionStore.clearRecoveryIfUnchanged(context, recoverySnapshot),
+                "l'ancien snapshot du registre peut être acquitté sans acquitter le journal modifié");
+        SessionJournal stillPresent = SessionStore.read(context);
+        ok(stillPresent != null && stillPresent.noticeShown
+                        && stillPresent.safeLengthBytes == 4_096L,
+                "le journal courant modifié reste présent malgré le même segment et le même offset");
+        ok(containsRecovery(SessionStore.readRecoveries(context), "same-prefix-session", 1L,
+                "same-prefix.gpx", 4_096L),
+                "le prochain scan réinscrit le journal récent au lieu de perdre la récupération");
+
+        section("Registre multi-sessions et multi-segments durable");
+        SessionStore.clear(context);
+        SessionJournal multiA1 = SessionJournal.of("multi-A", true, 1_000L, 1_100L,
+                true, false, 10L, 0, 10L, 0, "A-segment-1.gpx", 2_048L, 1L);
+        ok(SessionStore.write(context, multiA1), "premier segment A enregistré");
+        ok(SessionStore.registerSegment(context, "multi-A", 2L, "A-segment-2.gpx"),
+                "nouvelle génération A enregistrée sans supprimer le segment précédent");
+        ok(SessionStore.updateCheckpoint(context, "multi-A", 2L,
+                "A-segment-2.gpx", 1_024L), "checkpoint du segment A2 inscrit");
+        ok(SessionStore.updateCheckpoint(context, "multi-A", 1L,
+                "A-segment-1.gpx", 3_072L),
+                "checkpoint final retardé A1 mis à jour dans le registre seul");
+        SessionJournal multiB = SessionJournal.of("multi-B", true, 2_000L, 2_100L,
+                true, false, 1L, 0, 1L, 0, "B-segment-1.gpx", 0L, 1L);
+        ok(SessionStore.write(context, multiB), "nouveau START B remplace le journal courant");
+        ok(SessionStore.registerSegment(context, "multi-B", 1L, "B-segment-1.gpx"),
+                "fichier du segment B lié au journal courant");
+        ok(SessionStore.updateCheckpoint(context, "multi-B", 1L,
+                "B-segment-1.gpx", 4_096L), "checkpoint de B inscrit");
+        java.util.List<SessionJournal> multiPending = SessionStore.readRecoveries(context);
+        ok(multiPending.size() == 3, "trois segments de deux sessions sont conservés ensemble");
+        ok(containsRecovery(multiPending, "multi-A", 1L, "A-segment-1.gpx", 3_072L),
+                "ancienne session A/segment 1 encore récupérable");
+        ok(containsRecovery(multiPending, "multi-A", 2L, "A-segment-2.gpx", 1_024L),
+                "ancienne session A/segment 2 encore récupérable");
+        ok(containsRecovery(multiPending, "multi-B", 1L, "B-segment-1.gpx", 4_096L),
+                "session B courante présente dans le registre");
+        SessionJournal oldA1 = findRecovery(multiPending, "multi-A", 1L);
+        ok(SessionStore.clearRecoveryIfUnchanged(context, oldA1),
+                "récupération du segment A1 acquittée indépendamment");
+        ok("multi-B".equals(SessionStore.read(context).sessionId),
+                "l'acquittement de A1 ne supprime pas le journal actif B");
+        ok(SessionStore.clearRecoverySegment(context, "multi-A", 2L,
+                "A-segment-2.gpx", 1_024L),
+                "un segment A2 proprement fermé peut être retiré par son offset exact");
+        java.util.List<SessionJournal> afterA = SessionStore.readRecoveries(context);
+        ok(afterA.size() == 1 && containsRecovery(afterA, "multi-B", 1L,
+                "B-segment-1.gpx", 4_096L),
+                "les entrées A sont retirées sans toucher à la session B");
+        ok(SessionStore.clearRecoveryIfUnchanged(context, findRecovery(afterA, "multi-B", 1L)),
+                "le segment B peut être acquitté indépendamment");
+        ok(SessionStore.readRecoveries(context).isEmpty(), "registre vide après acquittement exact des trois segments");
+        SessionJournal openingC = SessionJournal.of("late-open-C", true, 3_000L, 3_100L,
+                true, false, 0L, 0, 0L, 0, "", 0L, 5L);
+        ok(SessionStore.write(context, openingC), "session C créée avant ouverture asynchrone");
+        SessionJournal newD = SessionJournal.of("new-D", true, 4_000L, 4_100L,
+                true, false, 0L, 0, 0L, 0, "", 0L, 1L);
+        ok(SessionStore.write(context, newD), "session D remplace C pendant son ouverture en attente");
+        ok(SessionStore.updateCheckpoint(context, "late-open-C", 5L,
+                "late-open-C.gpx", 2_048L),
+                "le premier checkpoint tardif C est inscrit malgré le journal actif D");
+        ok(containsRecovery(SessionStore.readRecoveries(context), "late-open-C", 5L,
+                "late-open-C.gpx", 2_048L),
+                "le premier checkpoint tardif reste récupérable");
+        ok("new-D".equals(SessionStore.read(context).sessionId),
+                "l'enregistrement tardif de C ne modifie jamais le journal actif D");
+        ok(SessionStore.clearRecoverySegment(context, "late-open-C", 5L,
+                "late-open-C.gpx", 2_048L), "fermeture propre du segment tardif C acquittée");
+
+        section("Registre de récupération corrompu préservé sans écrasement");
+        SessionStore.clear(context);
+        SessionJournal registryProtected = SessionJournal.of("registry-protected", true,
+                700L, 800L, true, false, 2L, 0, 2L, 0,
+                "protected.gpx", 4_096L, 1L);
+        ok(SessionStore.write(context, registryProtected),
+                "session et registre initial écrits avant corruption simulée");
+        File registryFile = new File(context.getFilesDir(), "recovery.registry");
+        try (FileOutputStream out = new FileOutputStream(registryFile, false)) {
+            out.write("registryFormat=999\ncount=0\n".getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+        }
+        ok(SessionStore.readRecoveries(context).isEmpty(),
+                "un registre illisible ne fournit aucune entrée inventée");
+        ok(registryFile.isFile() && new String(java.nio.file.Files.readAllBytes(registryFile.toPath()),
+                StandardCharsets.UTF_8).contains("registryFormat=999"),
+                "le registre corrompu reste disponible pour diagnostic");
+        SessionJournal replacementAfterRegistryDamage = SessionJournal.of("registry-replacement", true,
+                900L, 1_000L, true, false, 0L, 0, 0L, 0, "replacement.gpx", 0L, 1L);
+        ok(!SessionStore.write(context, replacementAfterRegistryDamage),
+                "un nouveau START ne remplace pas un journal dont le registre est illisible");
+        ok("registry-protected".equals(SessionStore.read(context).sessionId),
+                "le journal précédent reste la source de vérité après corruption du registre");
+
         section("Migration du journal historique externe");
         SessionStore.clear(context);
         File legacy = new File(context.getExternalFilesDir(null), SessionJournal.FILE_NAME);
@@ -221,6 +331,29 @@ public final class SessionStoreTest {
         System.out.println("\n---------------------------------------------");
         System.out.println("RESULTAT : " + pass + " reussis, " + fail + " echoues");
         if (fail > 0) System.exit(1);
+    }
+
+    private static boolean containsRecovery(java.util.List<SessionJournal> entries,
+                                            String sessionId, long generation,
+                                            String file, long length) {
+        return findRecovery(entries, sessionId, generation, file, length) != null;
+    }
+
+    private static SessionJournal findRecovery(java.util.List<SessionJournal> entries,
+                                               String sessionId, long generation) {
+        if (entries == null) return null;
+        for (SessionJournal entry : entries) {
+            if (sessionId.equals(entry.sessionId) && generation == entry.segmentGeneration) return entry;
+        }
+        return null;
+    }
+
+    private static SessionJournal findRecovery(java.util.List<SessionJournal> entries,
+                                               String sessionId, long generation,
+                                               String file, long length) {
+        SessionJournal entry = findRecovery(entries, sessionId, generation);
+        return entry != null && file.equals(entry.file) && length == entry.safeLengthBytes
+                ? entry : null;
     }
 
     private static void section(String value) { System.out.println("\n=== " + value + " ==="); }

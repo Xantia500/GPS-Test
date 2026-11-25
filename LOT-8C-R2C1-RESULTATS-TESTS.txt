@@ -1,0 +1,25 @@
+GPS-Test — LOT 8C-R2C.1 — résultats de validation locale
+Date : 25 novembre 2026
+Base : GPS-Test-LOT-8C-R2B4-PROJET-COMPLET-2026-11-25.zip
+SHA-256 base : fe82288207ea60c67f84ce0b48317dfc87c1c0f8e1b0ed3332db9c2a643adc74
+
+TESTS JVM
+Commande : python3 tools/run_jvm_tests.py
+Résultat final : 44 suites, 1 581 assertions réussies, 0 échec.
+- RecoveryRegistryTest : 33 assertions
+- SessionStoreTest : 95 assertions
+
+AUDITS STATIQUES
+- python3 tools/verify_gpx_recovery.py : OK
+- python3 tools/verify_gpx_checkpoint.py : OK
+- python3 tools/verify_gpx_async_open.py : OK
+- python3 tools/verify_android_project.py : OK — 17 XML, 84 sources Java
+- python3 tools/verify_offline_map_architecture.py : OK — 102 fichiers, aucun moteur/provider raster
+- python3 -m py_compile tools/verify_gpx_recovery.py tools/verify_gpx_checkpoint.py : OK
+
+VALIDATIONS NON EFFECTUÉES
+- Compilation Android R2C.1 / Android Studio : à confirmer par l'utilisateur.
+- Android Lint / tests instrumentés : non exécutés ici.
+- Appareil physique / ADB : reporté explicitement à plus tard par l'utilisateur, voir dossier MAJ9 §37.11.
+- Vérification du SHA du main GitHub : non réalisée.
+- Aucun fichier GitHub modifié.
