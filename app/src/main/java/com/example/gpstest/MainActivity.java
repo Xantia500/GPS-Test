@@ -635,9 +635,13 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 recoveryStatusLoading.set(false);
                 boolean diagnostic = !recoveryReadable || !publicationsReadable;
+                boolean retentionNotice = detail != null
+                        && (detail.contains("Conservation des copies publiées")
+                        || detail.contains("Seuil indicatif de stockage")
+                        || detail.contains("Registre de conservation illisible"));
                 boolean recentOutcome = recoveryLastPublished > 0 || recoveryLastLocalOnly > 0
                         || recoveryWaitingPermission > 0 || recoveryIntervention > 0
-                        || recoveryRecentNotice;
+                        || recoveryRecentNotice || retentionNotice;
                 boolean visible = diagnostic || recoveryCount > 0 || publicationCount > 0
                         || recentOutcome;
                 layoutRecoveryRetry.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);

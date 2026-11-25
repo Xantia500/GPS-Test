@@ -90,6 +90,9 @@ public final class GpxRecoveryRetryWorker extends Worker {
                 default:
                     if (result.isRecoveredLocally() && result.isPublishedExternally()) {
                         appendDetail(details, "Publiée : " + result.publishedDisplayName);
+                        // Inclut notamment l'information si la copie a été publiée
+                        // mais n'a pas pu être inscrite dans le registre de rétention.
+                        appendDetail(details, result.message);
                     } else if (result.status == GpxRecoveryWorkflow.Status.LOCAL_ONLY) {
                         localOnly++;
                         appendDetail(details, "Copie privée conservée : " + result.recoveredFileName);
@@ -162,6 +165,29 @@ public final class GpxRecoveryRetryWorker extends Worker {
                 appendDetail(details, "Transaction SAF orpheline : intervention nécessaire ; état conservé.");
             }
         }
+        boolean retentionRegistryError = false;
+        try {
+            RecoveryRetentionRegistry retention = new RecoveryRetentionStore(context).read();
+            RecoveryRetentionPolicy.Summary retentionSummary =
+                    RecoveryRetentionPolicy.summarize(retention, System.currentTimeMillis());
+            if (retentionSummary.trackedCopies > 0) {
+                appendDetail(details, "Conservation des copies publiées : "
+                        + retentionSummary.trackedCopies + " copie(s) suivie(s), "
+                        + retentionSummary.stillRetained + " encore dans les 30 jours minimum, "
+                        + retentionSummary.readyForReview + " arrivée(s) à échéance pour examen manuel, "
+                        + formatBytes(retentionSummary.trackedBytes) + " suivis.");
+            }
+            if (retentionSummary.softQuotaExceeded) {
+                appendDetail(details, "Seuil indicatif de stockage dépassé (512 Mio) ; aucune suppression automatique n'est déclenchée.");
+            }
+            if (retentionSummary.readyForReview > 0) {
+                appendDetail(details, "Des copies ont dépassé la durée minimale, mais aucune purge n'est activée : une confirmation explicite sera nécessaire dans une étape ultérieure.");
+            }
+        } catch (Exception corrupt) {
+            retentionRegistryError = true;
+            appendDetail(details, "Registre de conservation illisible ; les copies locales restent conservées et aucune action destructive n'est entreprise.");
+        }
+
         if (remaining == 0 && publicationEntries == 0 && details.length() == 0) {
             details.append("Aucune récupération GPX en attente.");
         }
@@ -173,7 +199,7 @@ public final class GpxRecoveryRetryWorker extends Worker {
                 + " journal(aux) restant(s), " + publicationEntries + " transaction(s) SAF.\n"
                 + details;
         return Result.success(output(summary, remaining, published, localOnly, waitingPermission,
-                intervention, registryError || publicationRegistryError,
+                intervention, registryError || publicationRegistryError || retentionRegistryError,
                 TrackingState.get().isUserWantsTracking(), legacyNoticeShown));
     }
 
@@ -198,6 +224,12 @@ public final class GpxRecoveryRetryWorker extends Worker {
                 .putBoolean(KEY_REGISTRY_ERROR, registryError)
                 .putBoolean(KEY_TRACKING_ACTIVE, trackingActive)
                 .putBoolean(KEY_NOTICE, hasNotice).build();
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 1024L) return bytes + " o";
+        if (bytes < 1024L * 1024L) return (bytes / 1024L) + " Kio";
+        return (bytes / (1024L * 1024L)) + " Mio";
     }
 
     private static void appendDetail(StringBuilder target, String message) {

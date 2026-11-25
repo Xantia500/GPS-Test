@@ -125,8 +125,26 @@ public final class GpxRecoveryWorkflow {
                 return result(Status.JOURNAL_NOT_ACKNOWLEDGED, recovery, published.displayName,
                         "Document SAF publié et vérifié ; le journal de récupération a évolué et reste conservé.", published);
             }
+
+            // Le registre de conservation n'est alimenté qu'après :
+            // 1) relecture SAF vérifiée (PUBLISHED), 2) retrait de la transaction
+            // VERIFIED et 3) acquittement exact du snapshot de récupération.
+            // Si cette dernière écriture échoue, le fichier local reste simplement
+            // conservé indéfiniment : aucune purge ne dépend d'un registre incomplet.
+            RecoveryRetentionRegistry.Entry retention = RecoveryRetentionRegistry.Entry.published(
+                    published.publicationId, expected.sessionId, expected.segmentGeneration,
+                    expected.file, recovery.recoveredFileName, published.bytes,
+                    published.sha256, tree.toString(), published.documentUri,
+                    published.displayName, System.currentTimeMillis());
+            boolean retentionRecorded = retention != null
+                    && new RecoveryRetentionStore(context).addOrVerify(retention);
+            String retentionNotice = retentionRecorded
+                    ? " Copie locale inscrite au registre de conservation ; conservation minimale : "
+                        + RecoveryRetentionPolicy.MIN_RETENTION_DAYS + " jours. Aucune suppression automatique n'est activée."
+                    : " La publication est réussie, mais le registre de conservation n'a pas pu être mis à jour ; la copie locale sera conservée sans limite plutôt que purgée.";
             return result(Status.PUBLISHED, recovery, published.displayName,
-                    "Trace récupérée et publiée dans le dossier choisi. Le document SAF a été relu et vérifié.", published);
+                    "Trace récupérée et publiée dans le dossier choisi. Le document SAF a été relu et vérifié."
+                            + retentionNotice, published);
         }
     }
 

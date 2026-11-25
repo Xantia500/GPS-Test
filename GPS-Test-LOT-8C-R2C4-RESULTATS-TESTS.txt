@@ -1,0 +1,48 @@
+GPS-Test — LOT 8C-R2C.4 — résultats de validation
+Date : 25 novembre 2026
+Base : GPS-Test-LOT-8C-R2C3-PROJET-COMPLET-2026-11-25.zip
+SHA-256 de la base : dd88dc5b2b02ccf20ebc4c1f6af63bd12e237debd743ce02815687b8df3c3aef
+
+1. Tests JVM
+Commande : python3 tools/run_jvm_tests.py
+Résultat : 50 suites, 1 715 assertions réussies, 0 échec.
+Nouvelles suites R2C.4 :
+- RecoveryRetentionRegistryTest : 21 assertions.
+- RecoveryRetentionPolicyTest : 22 assertions.
+- RecoveryRetentionStoreTest : 9 assertions.
+
+2. Audits statiques Android et architecture
+Commande : python3 tools/verify_android_project.py
+Résultat : 17 ressources XML analysées ; 95 sources Java auditées ; ressources R, manifeste, permissions, foreground service, SDK et Edge-to-Edge cohérents.
+
+Commande : python3 tools/verify_offline_map_architecture.py
+Résultat : 113 fichiers analysés ; aucun moteur ou fournisseur raster détecté ; architecture vectorielle hors ligne conservée.
+
+3. Invariants des lots de fiabilité GPX
+- python3 tools/verify_gpx_async_open.py : OK.
+- python3 tools/verify_gpx_checkpoint.py : OK.
+- python3 tools/verify_gpx_recovery.py : OK.
+- python3 tools/verify_gpx_recovery_publication.py : OK.
+- python3 tools/verify_gpx_recovery_retry.py : OK.
+- python3 tools/verify_gpx_recovery_retention.py : OK.
+
+4. Outillage et CI
+- python3 -m py_compile tools/*.py : OK.
+- Analyse YAML de .github/workflows/android-build.yml : OK.
+- L'étape CI de vérification R2C.4 est présente.
+
+5. Politique R2C.4
+- Seules les copies locales *_RECUPEREE dont la publication SAF est vérifiée et dont le snapshot de récupération est acquitté sont suivies.
+- 30 jours minimum avant examen manuel.
+- 512 Mio : seuil indicatif uniquement.
+- 128 entrées maximum, aucune éviction.
+- Aucune suppression automatique ou manuelle n'est activée.
+- Source interrompue et copie privée non publiée hors registre et conservées sans limite.
+- Si le registre de rétention ne peut pas être écrit, la publication reste considérée réussie et la copie locale reste conservée sans limite.
+
+6. Compilation Android et essais réels
+Aucune compilation Android, Android Lint, test instrumenté, test ADB ou test sur téléphone n'a été lancé par l'assistant. L'utilisateur a explicitement demandé à prendre en charge la compilation Android lui-même. La compilation R2C.3 est confirmée par l'utilisateur ; la compilation R2C.4 est à effectuer après remplacement.
+La campagne sur téléphone réel, ADB, DocumentsUI, MediaProvider, stockage cloud, MTP et carte SD reste explicitement reportée à plus tard.
+
+7. Dépôt distant
+Aucun fichier GitHub n'a été modifié. La candidate a été préparée dans une copie locale du projet R2C.3.

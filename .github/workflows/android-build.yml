@@ -67,6 +67,9 @@ jobs:
       - name: Verify persistent GPX recovery retry workflow
         run: python3 tools/verify_gpx_recovery_retry.py
 
+      - name: Verify conservative GPX recovery retention policy
+        run: python3 tools/verify_gpx_recovery_retention.py
+
       - name: JVM regression tests
         run: bash tools/run_jvm_tests.sh
 
